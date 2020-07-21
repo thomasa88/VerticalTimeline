@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <style>
+            #content {
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                min-height: 95vh;
+            }
+            .feature {
+                list-style-type: none;
+                margin-top: 5px;
+            }
+            .suppressed {
+                opacity: 0.5;
+            }
+            .icon {
+                width: 16px;
+                height: 16px;
+                vertical-align: middle;
+            }
+            .name {
+                margin-left: 3px;
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 14px;
+            }
+            ul {
+                padding-left: 12px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="content">
+            <div id="timeline">
+            
+            </div>
+            <div>
+                 Copyright 2020 Thomas Axelsson
+            </div>
+        </div>
+    </body>
+    <script>
+    window.fusionJavaScriptHandler = {handle: function(action, jsonData){
+        console.log("Got command:", action);
+        data = JSON.parse(jsonData);
+        return handle(action, data);
+    }};
+
+    function handle(action, data) {
+        try {
+            switch (action) {
+                case 'setTimeline':
+                    let timeline = document.getElementById('timeline');
+                    let items = data;
+
+                    timeline.innerHTML = '';
+                    appendItems(timeline, items)
+
+                    break;
+                case 'debugger':
+                    debugger;
+                    break;
+            }
+        } catch (e) {
+            console.log(e);
+            console.log('exception caught with action: ' + action + ', data: ' + data);
+            return 'FAILED';
+        }
+        return 'OK';
+    }
+
+    function appendItems(parent, items) {
+        let list = document.createElement('ul');
+        for (const item of items) {
+            let listItem = document.createElement('li');
+            listItem.classList.add('feature');
+            if (item.suppressed) {
+                listItem.classList.add('suppressed');
+            }
+
+            let image = document.createElement('img');
+            image.src = item['image'];
+            image.title = item.type;
+            image.classList.add('icon');
+            listItem.appendChild(image);
+
+            let name = document.createElement('span');
+            name.classList.add('name');
+            name.innerText = item.name;
+            listItem.appendChild(name);
+
+            if (item.type == 'GROUP') {
+                appendItems(listItem, item.children);
+            }
+            list.appendChild(listItem);
+        }
+        parent.appendChild(list)
+    }
+
+    function send(action, data = {}) {
+        let ret = adsk.fusionSendData(action, JSON.stringify(data));
+        console.log("RET:", ret);
+        if (ret) {
+            let commands = JSON.parse(ret);
+            for (let command of commands) {
+                handle(command['action'], command['data']);
+            }
+        }
+    }
+
+    function query(action, data = {}) {
+        let ret = adsk.fusionSendData(action, JSON.stringify(data));
+        console.log("RET:", ret);
+        return JSON.parse(ret);        
+    }
+
+    function waitForSdk() {
+        if (window.adsk) {
+            ready();
+        } else {
+            console.log("Waiting for SDK");
+            setTimeout(waitForSdk, 500);
+        }
+    }
+
+    function ready(){
+        console.log("HTML ready");
+        send('ready');
+    }
+
+    document.body.onload = waitForSdk;
+    console.log("script end");
+    </script>
+</html>
