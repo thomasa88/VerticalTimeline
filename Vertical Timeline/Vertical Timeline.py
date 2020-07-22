@@ -183,6 +183,24 @@ def get_item_by_id_string(id_string):
         item = item[int(i)]
     return item
 
+def error_catcher_wrapper(func):
+    def catcher(self, args):
+        try:
+            func(args)
+        except:
+            ui.messageBox(f'Vertical Timeline failed:\n{traceback.format_exc()}')
+    return catcher
+
+def create_handler(base_class, notify_callback):
+    handler_name = base_class.__name__ + 'Handler'
+    handler_class = type(handler_name, (base_class,),
+                         { "notify": error_catcher_wrapper(notify_callback) })
+    handler_class.__init__ = lambda self: super(handler_class, self).__init__()
+    handler = handler_class()
+    # Avoid garbage collection
+    handlers.append(handler)
+    return handler
+
 def run(context):
     global ui, app, handlers
     debug = False
@@ -201,30 +219,24 @@ def run(context):
                 'A vertical timeline, that shows feature names. Timeline functionality is limited.',
                 '')
 
-            # Connect to Command Created event.
-            onCommandCreated = ShowPaletteCommandCreatedHandler()
-            showPaletteCmdDef.commandCreated.add(onCommandCreated)
-            handlers.append(onCommandCreated)
+            showPaletteCmdDef.commandCreated.add(create_handler(adsk.core.CommandCreatedEventHandler,
+                                                 show_palette_command_created_handler))
         
         # Add the command to the toolbar.
         panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
         cntrl = panel.controls.itemById('thomasa88_showVerticalTimeline')
         if not cntrl:
             panel.controls.addCommand(showPaletteCmdDef)
-
-        global onCommandTerminated
-        onCommandTerminated = CommandTerminatedHandler()
-        ui.commandTerminated.add(onCommandTerminated)
-        handlers.append(onCommandTerminated)
-
+        
         # Need to unregister handlers at stop()?
-        onDocumentDeactivating = DocumentDeactivatingHandler()
-        app.documentDeactivating.add(onDocumentDeactivating)
-        handlers.append(onDocumentDeactivating)
+        ui.commandTerminated.add(create_handler(adsk.core.ApplicationCommandEventHandler,
+                                                command_terminated_handler))
 
-        onDocumentActivated = DocumentActivatedHandler()
-        app.documentActivated.add(onDocumentActivated)
-        handlers.append(onDocumentActivated)
+        app.documentDeactivating.add(create_handler(adsk.core.DocumentEventHandler,
+                                                    document_deactivating_handler))
+
+        app.documentActivated.add(create_handler(adsk.core.DocumentEventHandler,
+                                                 document_activated_handler))
 
         print("Running")
     except:
@@ -235,10 +247,6 @@ def run(context):
 def stop(context):
     try:
         print('Stopping')
-
-        # Do we need to remove the commandTerminated handler or not?
-        if onCommandTerminated:
-            ui.commandTerminated.remove(onCommandTerminated)
 
         # Delete the palette created by this add-in.
         palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
@@ -258,7 +266,6 @@ def stop(context):
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
 
-# Event handler for the commandExecuted event.
 class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
     def __init__(self):
         super().__init__()
@@ -286,17 +293,11 @@ class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
             ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
 
 # Event handler for the commandCreated event.
-class ShowPaletteCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            command = args.command
-            onExecute = ShowPaletteCommandExecuteHandler()
-            command.execute.add(onExecute)
-            handlers.append(onExecute)                                     
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc())) 
+def show_palette_command_created_handler(args):
+        command = args.command
+        onExecute = ShowPaletteCommandExecuteHandler()
+        command.execute.add(onExecute)
+        handlers.append(onExecute)
 
 # Event handler for the palette close event.
 class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
@@ -369,37 +370,24 @@ class CommandTerminationReason:
     PreEmptedTerminationReason = 4
     SessionEndingTerminationReason = 5
 
-class CommandTerminatedHandler(adsk.core.ApplicationCommandEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
-            
-            # As long as we don't update on command create, we only need to listen for command completion
-            if eventArgs.terminationReason != CommandTerminationReason.CompletedTerminationReason:
-                return
 
-            # Heavy traffic commands
-            if eventArgs.commandId in ['SelectCommand', 'CommitCommand']:
-                return
-            
-            invalidate()
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+def command_terminated_handler(args):
+    eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
+    
+    # As long as we don't update on command create, we only need to listen for command completion
+    if eventArgs.terminationReason != CommandTerminationReason.CompletedTerminationReason:
+        return
 
-class DocumentDeactivatingHandler(adsk.core.DocumentEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
+    # Heavy traffic commands
+    if eventArgs.commandId in ['SelectCommand', 'CommitCommand']:
+        return
+    
+    invalidate()
+
+def document_deactivating_handler(args):
         eventArgs = adsk.core.DocumentEventArgs.cast(args)
-
         invalidate(emptyTimeline=True)
 
-class DocumentActivatedHandler(adsk.core.DocumentEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
+def document_activated_handler(args):
         eventArgs = adsk.core.DocumentEventArgs.cast(args)
-
         invalidate()
