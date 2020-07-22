@@ -90,6 +90,9 @@ class MyHTMLEventHandler(adsk.core.HTMLEventHandler):
                 if item.isSuppressed:
                     ui.messageBox('Cannot select suppressed features')
                     ret = False
+                elif item.isRolledBack:
+                    ui.messageBox('Cannot select rolled back features')
+                    ret = False
                 else:
                     # Making this in a transactory way so the current selection is not removed
                     # if the entity is not selectable.
@@ -214,30 +217,39 @@ def get_timeline():
         # Not parametric design (?)
         return None
 
-def occurrence_feature_resource(entity):
-    if entity.name.startswith('CopyPaste '):
-        return 'File/CloneFeature'
+def occurrence_feature_resource(item):
+    if item.name.startswith('CopyPaste '):
+        # Copy component
+        return 'Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance'
+    elif hasattr(item.entity, 'bRepBodies'):
+        if item.entity.bRepBodies.count == 0:
+            # Sheet metal
+            return 'Neutron/UI/Base/Resources/Browser/ComponentSheetMetal'
+        else:
+            # Component from bodies
+            return 'Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody'
     else:
-        return 'Modeling/BooleanNewComponent'
+        return 'Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent'
 
 FEATURE_RESOURCE_MAP = {
     # This list is hand-crafted. Please respect the work put into this list and
     # retain the Copyright and License stanzas if you copy it.
-    # Helpful tool: ImageSorter, set to color sort (Windows application).
-    'LoftFeature': lambda e: 'solid/loft' if e.isSolid else 'surface/loft',
-    'Sketch': 'sketch/Sketch_feature',
-    'ExtrudeFeature': lambda e: 'solid/extrude' if e.isSolid else 'surface/extrude',
+    # Helpful toosl: ImageSorter, Process Monitor.
+    'LoftFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/loft' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/loft',
+    'Sketch': 'Fusion/UI/FusionUI/Resources/sketch/Sketch_feature',
+    'ExtrudeFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/extrude' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/extrude',
     'Occurrence': occurrence_feature_resource,
-    'BoundaryFillFeature': 'surface/surface_sculpt',
-    'SurfaceDeleteFaceFeature': 'modify/surface_delete',
-    'CombineFeature': 'modify/combine',
+    'BoundaryFillFeature': 'Fusion/UI/FusionUI/Resources/surface/surface_sculpt',
+    'SurfaceDeleteFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/surface_delete',
+    'CombineFeature': 'Fusion/UI/FusionUI/Resources/modify/combine',
 }
 
-def get_feature_image(entity):
+def get_feature_image(item):
+    entity = item.entity
     fusionType = entity.classType().replace('adsk::fusion::', '')
     match = FEATURE_RESOURCE_MAP.get(fusionType)
     if callable(match):
-        match = match(entity)
+        match = match(item)
 
     if not match:
         # Image not mapped
@@ -246,7 +258,7 @@ def get_feature_image(entity):
     return get_image_path(match)
 
 def get_image_path(subpath):
-    path = f'{get_resource_folder()}/{subpath}/16x16.png'
+    path = f'{get_product_deploy_folder()}/{subpath}/16x16.png'
     if os.path.exists(path):
         return path
     else:
@@ -259,6 +271,9 @@ def get_resource_folder():
     if not _resFolder:
         _resFolder = ui.workspaces.itemById('FusionSolidEnvironment').resourceFolder.replace('/Environment/Model', '')
     return _resFolder
+
+def get_product_deploy_folder():
+    return get_resource_folder().replace('/Fusion/UI/FusionUI/Resources', '')
 
 def find_commands(substring):
     return [c.id for c in ui.commandDefinitions if substring in c.id.lower()]
@@ -307,11 +322,11 @@ def get_features(timeline_container, id_base=''):
         feature = {
             'id': f'{id_base}{i}',
             'name': item.name,
-            'suppressed': item.isSuppressed,
+            'suppressed': item.isSuppressed or item.isRolledBack,
             }
         if not item.isGroup:
             feature['type'] = item.entity.classType().split('::')[-1]
-            feature['image'] = get_feature_image(item.entity)
+            feature['image'] = get_feature_image(item)
             if feature['type'] == 'Occurrence':
                 feature['component-name'] = item.entity.component.name
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
@@ -319,7 +334,7 @@ def get_features(timeline_container, id_base=''):
                 feature['name'] = feature['name'].lstrip()
         else:
             feature['type'] = 'GROUP'
-            feature['image'] = get_image_path('Timeline/GroupFeature')
+            feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Timeline/GroupFeature')
             feature['children'] = get_features(item, feature['id'] + '-')
         features.append(feature)
     return features
