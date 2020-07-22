@@ -74,18 +74,29 @@ class MyHTMLEventHandler(adsk.core.HTMLEventHandler):
                 # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
                 html_commands.append(invalidate(send=False))
             elif action == 'setFeatureName':
-                ids = data['id'].split('-')
-                timeline_object = get_timeline()
-                for i in ids:
-                    timeline_object = timeline_object[int(i)]
-                if (not timeline_object.isGroup and
-                    timeline_object.entity.classType() == 'adsk::fusion::Occurrence'):
-                    timeline_object.entity.component.name = data['value']
+                item = get_item_by_id_string(data['id'].split('-'))
+                if (not item.isGroup and
+                    item.entity.classType() == 'adsk::fusion::Occurrence'):
+                    item.entity.component.name = data['value']
                     html_commands.append(True)
                     html_commands.append(invalidate(send=False))
                 else:
-                    timeline_object.name = data['value']
+                    item.name = data['value']
                     html_commands.append(True)
+            elif action == 'selectFeature':
+                ret = True
+                item = get_item_by_id_string(data['id'].split('-'))
+
+                # Making this in a transactory way so the current selection is not removed
+                # if the entity is not selectable.
+                newSelection = adsk.core.ObjectCollection.create()
+                newSelection.add(item.entity)
+                try:
+                    ui.activeSelections.all = newSelection
+                except:
+                    ui.messageBox('Cannot select this entity')
+                    ret = False
+                html_commands.append(ret)
             if html_commands:
                 htmlArgs.returnData = json.dumps(html_commands)
         except:
@@ -292,3 +303,9 @@ def get_features(timeline_container, id_base=''):
             feature['children'] = get_features(item, feature['id'] + '-')
         features.append(feature)
     return features
+
+def get_item_by_id_string(id_string):
+    item = get_timeline()
+    for i in id_string:
+        item = item[int(i)]
+    return item

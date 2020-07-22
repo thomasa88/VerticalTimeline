@@ -90,6 +90,7 @@
             let image = document.createElement('img');
             image.src = item['image'];
             image.classList.add('icon');
+            image.addEventListener('click', onFeatureClick);
             listItem.appendChild(image);
 
             let name = document.createElement('span');
@@ -145,6 +146,13 @@
         let sel = window.getSelection();
         sel.removeAllRanges();
         sel.addRange(range);
+    }
+
+    function onFeatureClick(e) {
+        let item = e.target.parentElement;
+
+        let ret = query('selectFeature', { 'id': item.getAttribute('data-id') } );
+        processCommands(ret);
     }
 
     function storeFeatureName(item) {
