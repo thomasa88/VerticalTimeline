@@ -64,13 +64,30 @@ class MyHTMLEventHandler(adsk.core.HTMLEventHandler):
     def notify(self, args):
         try:
             htmlArgs = adsk.core.HTMLEventArgs.cast(args)
+            action = htmlArgs.action
             data = json.loads(htmlArgs.data)
-            if htmlArgs.action == 'ready':
+            html_commands = []
+            if action == 'ready':
                 print('HTML ready')
 
                 # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
                 # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
-                invalidate(htmlArgs)
+                html_commands.append(invalidate(send=False))
+            elif action == 'setFeatureName':
+                ids = data['id'].split('-')
+                timeline_object = get_timeline()
+                for i in ids:
+                    timeline_object = timeline_object[int(i)]
+                if (not timeline_object.isGroup and
+                    timeline_object.entity.classType() == 'adsk::fusion::Occurrence'):
+                    timeline_object.entity.component.name = data['value']
+                    html_commands.append(True)
+                    html_commands.append(invalidate(send=False))
+                else:
+                    timeline_object.name = data['value']
+                    html_commands.append(True)
+            if html_commands:
+                htmlArgs.returnData = json.dumps(html_commands)
         except:
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))   
 
@@ -232,41 +249,46 @@ def find_commands_by_resource_folder(folder):
 # ui.commandDefinitions.itemById('').resourceFolder
 # design.rootComponent.allOccurrences[0].component.sketches
 
-def invalidate(toHtmlArgsReturn=None):
+timeline_cache = []
+def invalidate(send=True):
+    global timeline_cache
+
     palette = ui.palettes.itemById('thomasa88-verticalTimelinePalette')
 
     timeline = get_timeline()
-
     features = get_features(timeline)
+    timeline_cache = features
 
     action = 'setTimeline'
     data = features
-    if toHtmlArgsReturn:
+    if not send:
         # Cannot do sendInfoToHTML inside the HTML event handler. We either have to use htmlArgs.returnData or
         # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
         html_command = {'action': 'setTimeline', 'data': data}
-        html_commands = [html_command]
-        toHtmlArgsReturn.returnData = json.dumps(html_commands) 
+        return html_command
     else:
         palette.sendInfoToHTML('setTimeline', json.dumps(data))
 
-def get_features(timeline_container):
+def get_features(timeline_container, id_base=''):
     features = []
-    for item in timeline_container:
+    for i, item in enumerate(timeline_container):
         classType = item.classType()
         feature = {
+            'id': f'{id_base}{i}',
             'name': item.name,
             'suppressed': item.isSuppressed,
             }
-        if classType == 'adsk::fusion::TimelineObject':
-            feature['type'] = item.entity.classType().split('::')[-1],
+        if not item.isGroup:
+            feature['type'] = item.entity.classType().split('::')[-1]
             feature['image'] = get_feature_image(item.entity)
-        elif classType == 'adsk::fusion::TimelineGroup':
+            if feature['type'] == 'Occurrence':
+                feature['component-name'] = item.entity.component.name
+                # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
+                # Strip the whitespace to make the list cleaner.
+                feature['name'] = feature['name'].lstrip()
+        else:
             feature['type'] = 'GROUP'
             feature['image'] = get_image_path('Timeline/GroupFeature')
-            feature['children'] = get_features(item)
-        else:
-            print("Unhandled timeline item:", classType)
-            continue
+            feature['children'] = get_features(item, feature['id'] + '-')
         features.append(feature)
     return features

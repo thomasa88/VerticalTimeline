@@ -21,7 +21,7 @@
                 vertical-align: middle;
             }
             .name {
-                margin-left: 3px;
+                margin-left: 5px;
                 font-family: Arial, Helvetica, sans-serif;
                 font-size: 14px;
             }
@@ -36,7 +36,7 @@
             
             </div>
             <div>
-                 Copyright 2020 Thomas Axelsson
+                 by Thomas Axelsson 2020
             </div>
         </div>
     </body>
@@ -75,19 +75,30 @@
         for (const item of items) {
             let listItem = document.createElement('li');
             listItem.classList.add('feature');
-            if (item.suppressed) {
+            if (listItem.suppressed) {
                 listItem.classList.add('suppressed');
+            }
+            listItem.title = item.type;
+
+            listItem.setAttribute('data-id', item['id']);
+            listItem.setAttribute('data-name', item.name);
+
+            if (item['component-name']) {
+                listItem.setAttribute('data-component-name', item['component-name']);
             }
 
             let image = document.createElement('img');
             image.src = item['image'];
-            image.title = item.type;
             image.classList.add('icon');
             listItem.appendChild(image);
 
             let name = document.createElement('span');
             name.classList.add('name');
             name.innerText = item.name;
+            name.contentEditable = true;
+            name.addEventListener('keypress', onFeatureEdit);
+            name.addEventListener('blur', onFeatureEditBlur);
+            name.addEventListener('focus', onFeatureEditFocus);
             listItem.appendChild(name);
 
             if (item.type == 'GROUP') {
@@ -98,15 +109,78 @@
         parent.appendChild(list)
     }
 
-    function send(action, data = {}) {
-        let ret = adsk.fusionSendData(action, JSON.stringify(data));
-        console.log("RET:", ret);
-        if (ret) {
-            let commands = JSON.parse(ret);
-            for (let command of commands) {
-                handle(command['action'], command['data']);
+    function onFeatureEdit(e) {
+        let item = e.target.parentElement;
+        ESC_KEY = 27;
+        ENTER_KEY = 13;
+        if (e.which == ESC_KEY) {
+            item.querySelector('.name').innerText = item.getAttribute('data-name');
+            e.preventDefault();
+        } else if (e.which == ENTER_KEY) {
+            e.target.blur();
+            e.preventDefault();
+        }
+    }
+
+    function onFeatureEditBlur(e) {
+        let item = e.target.parentElement;
+        let hasComponentName = item.hasAttribute('data-component-name');
+
+        storeFeatureName(item);
+
+        if (hasComponentName) {
+            item.querySelector('.name').innerText = item.getAttribute('data-name');
+        }
+    }
+
+    function onFeatureEditFocus(e) {
+        let item = e.target.parentElement;
+
+        if (item.hasAttribute('data-component-name')) {
+            item.querySelector('.name').innerText = item.getAttribute('data-component-name');
+        }
+
+        let range = document.createRange();
+        range.selectNodeContents(e.target);
+        let sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function storeFeatureName(item) {
+        let value = item.querySelector('.name').innerText;
+        let hasComponentName = item.hasAttribute('data-component-name');
+
+        if (hasComponentName) {
+            if (value == item.getAttribute('data-component-name')) {
+                return;
+            }
+        } else {
+            if (value == item.getAttribute('data-name')) {
+                // No change
+                return;
             }
         }
+
+        ret = query('setFeatureName', { 'id': item.getAttribute('data-id'), 'value': value });
+        ok = ret[0]
+        if (ok) {
+            item.setAttribute('data-name', value);
+        } else {
+            item.querySelector('.name').innerText = item.getAttribute('data-name');
+        }
+        processCommands(ret.slice(1));
+    }
+
+    function processCommands(commands) {
+        for (let command of commands) {
+            handle(command['action'], command['data']);
+        }
+    }
+
+    function send(action, data = {}) {
+        let commands = query(action, data);
+        processCommands(commands);
     }
 
     function query(action, data = {}) {
