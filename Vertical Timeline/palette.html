@@ -75,7 +75,7 @@
         for (const item of items) {
             let listItem = document.createElement('li');
             listItem.classList.add('feature');
-            if (listItem.suppressed) {
+            if (item.suppressed) {
                 listItem.classList.add('suppressed');
             }
             listItem.title = item.type;
