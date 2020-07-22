@@ -121,9 +121,9 @@ def find_commands_by_resource_folder(folder):
 # ui.commandDefinitions.itemById('').resourceFolder
 # design.rootComponent.allOccurrences[0].component.sketches
 
-timeline_cache = []
-def invalidate(send=True):
-    global timeline_cache
+features_cache = []
+def invalidate(send=True, emptyTimeline=False):
+    global features_cache
 
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
 
@@ -132,8 +132,12 @@ def invalidate(send=True):
         return
 
     timeline = get_timeline()
-    features = get_features(timeline)
-    timeline_cache = features
+    if emptyTimeline:
+        features = []
+    else:
+        features = get_features(timeline)
+    
+    features_cache = features
 
     action = 'setTimeline'
     data = features
@@ -213,6 +217,15 @@ def run(context):
         ui.commandTerminated.add(onCommandTerminated)
         handlers.append(onCommandTerminated)
 
+        # Need to unregister handlers at stop()?
+        onDocumentDeactivating = DocumentDeactivatingHandler()
+        app.documentDeactivating.add(onDocumentDeactivating)
+        handlers.append(onDocumentDeactivating)
+
+        onDocumentActivated = DocumentActivatedHandler()
+        app.documentActivated.add(onDocumentActivated)
+        handlers.append(onDocumentActivated)
+
         print("Running")
     except:
         print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
@@ -259,12 +272,12 @@ class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
                 palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
     
                 # Add handler to HTMLEvent of the palette.
-                onHTMLEvent = MyHTMLEventHandler()
+                onHTMLEvent = HTMLEventHandler()
                 palette.incomingFromHTML.add(onHTMLEvent)   
                 handlers.append(onHTMLEvent)
     
                 # Add handler to CloseEvent of the palette.
-                onClosed = MyCloseEventHandler()
+                onClosed = CloseEventHandler()
                 palette.closed.add(onClosed)
                 handlers.append(onClosed)
             else:
@@ -286,7 +299,7 @@ class ShowPaletteCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc())) 
 
 # Event handler for the palette close event.
-class MyCloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
+class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
     def __init__(self):
         super().__init__()
     def notify(self, args):
@@ -296,7 +309,7 @@ class MyCloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
 # Event handler for the palette HTML event.                
-class MyHTMLEventHandler(adsk.core.HTMLEventHandler):
+class HTMLEventHandler(adsk.core.HTMLEventHandler):
     def __init__(self):
         super().__init__()
     def notify(self, args):
@@ -375,3 +388,18 @@ class CommandTerminatedHandler(adsk.core.ApplicationCommandEventHandler):
         except:
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
+class DocumentDeactivatingHandler(adsk.core.DocumentEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        eventArgs = adsk.core.DocumentEventArgs.cast(args)
+
+        invalidate(emptyTimeline=True)
+
+class DocumentActivatedHandler(adsk.core.DocumentEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        eventArgs = adsk.core.DocumentEventArgs.cast(args)
+
+        invalidate()
