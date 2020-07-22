@@ -214,19 +214,28 @@ def get_timeline():
         # Not parametric design (?)
         return None
 
-FEATURE_MAP = {
+def occurrence_feature_resource(entity):
+    if entity.name.startswith('CopyPaste '):
+        return 'File/CloneFeature'
+    else:
+        return 'Modeling/BooleanNewComponent'
+
+FEATURE_RESOURCE_MAP = {
+    # This list is hand-crafted. Please respect the work put into this list and
+    # retain the Copyright and License stanzas if you copy it.
+    # Helpful tool: ImageSorter, set to color sort (Windows application).
     'LoftFeature': lambda e: 'solid/loft' if e.isSolid else 'surface/loft',
     'Sketch': 'sketch/Sketch_feature',
     'ExtrudeFeature': lambda e: 'solid/extrude' if e.isSolid else 'surface/extrude',
-    'Occurrence': 'Modeling/BooleanNewComponent',
+    'Occurrence': occurrence_feature_resource,
     'BoundaryFillFeature': 'surface/surface_sculpt',
     'SurfaceDeleteFaceFeature': 'modify/surface_delete',
-    'CombineFeature': 'modify/combine'
+    'CombineFeature': 'modify/combine',
 }
 
 def get_feature_image(entity):
     fusionType = entity.classType().replace('adsk::fusion::', '')
-    match = FEATURE_MAP.get(fusionType)
+    match = FEATURE_RESOURCE_MAP.get(fusionType)
     if callable(match):
         match = match(entity)
 
