@@ -13,10 +13,10 @@ class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
     def notify(self, args):
         try:
             # Create and display the palette.
-            palette = ui.palettes.itemById('thomasa88-verticalTimelinePalette')
+            palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
             if not palette:
-                palette = ui.palettes.add('thomasa88-verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
-                                          True, True, True, 300, 500, False)
+                palette = ui.palettes.add('thomasa88_verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
+                                          True, True, True, 250, 500, False)
                 palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
     
                 # Add handler to HTMLEvent of the palette.
@@ -147,12 +147,15 @@ def run(context):
         ui = app.userInterface
 
          # Add a command that displays the panel.
-        showPaletteCmdDef = ui.commandDefinitions.itemById('thomasa88-showVerticalTimeline')
+        showPaletteCmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
 
         if not showPaletteCmdDef:
-            showPaletteCmdDef = ui.commandDefinitions.addButtonDefinition('thomasa88-showVerticalTimeline',
-                                                                           'Show Vertical Timeline',
-                                                                           'Show Vertical', '')
+            showPaletteCmdDef = ui.commandDefinitions.addButtonDefinition(
+                'thomasa88_showVerticalTimeline',
+                'Show Vertical Timeline',
+                'Vertical Timeline\n\n' +
+                'A vertical timeline, that shows feature names. Timeline functionality is limited.',
+                '')
 
             # Connect to Command Created event.
             onCommandCreated = ShowPaletteCommandCreatedHandler()
@@ -161,7 +164,7 @@ def run(context):
         
         # Add the command to the toolbar.
         panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
-        cntrl = panel.controls.itemById('thomasa88-showVerticalTimeline')
+        cntrl = panel.controls.itemById('thomasa88_showVerticalTimeline')
         if not cntrl:
             panel.controls.addCommand(showPaletteCmdDef)
 
@@ -185,16 +188,16 @@ def stop(context):
             ui.commandTerminated.remove(onCommandTerminated)
 
         # Delete the palette created by this add-in.
-        palette = ui.palettes.itemById('thomasa88-verticalTimelinePalette')
+        palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
         if palette:
             palette.deleteMe()
 
         # Delete controls and associated command definitions created by this add-ins
         panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
-        cmd = panel.controls.itemById('thomasa88-showVerticalTimeline')
+        cmd = panel.controls.itemById('thomasa88_showVerticalTimeline')
         if cmd:
             cmd.deleteMe()
-        cmdDef = ui.commandDefinitions.itemById('thomasa88-showVerticalTimeline')
+        cmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
         if cmdDef:
             cmdDef.deleteMe()
     except:
@@ -268,7 +271,11 @@ timeline_cache = []
 def invalidate(send=True):
     global timeline_cache
 
-    palette = ui.palettes.itemById('thomasa88-verticalTimelinePalette')
+    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+
+    if not palette:
+        print("Should not try to invalidate when the palette is not shown.")
+        return
 
     timeline = get_timeline()
     features = get_features(timeline)
