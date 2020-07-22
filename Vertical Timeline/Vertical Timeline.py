@@ -87,15 +87,19 @@ class MyHTMLEventHandler(adsk.core.HTMLEventHandler):
                 ret = True
                 item = get_item_by_id_string(data['id'].split('-'))
 
-                # Making this in a transactory way so the current selection is not removed
-                # if the entity is not selectable.
-                newSelection = adsk.core.ObjectCollection.create()
-                newSelection.add(item.entity)
-                try:
-                    ui.activeSelections.all = newSelection
-                except:
-                    ui.messageBox('Cannot select this entity')
+                if item.isSuppressed:
+                    ui.messageBox('Cannot select suppressed features')
                     ret = False
+                else:
+                    # Making this in a transactory way so the current selection is not removed
+                    # if the entity is not selectable.
+                    newSelection = adsk.core.ObjectCollection.create()
+                    newSelection.add(item.entity)
+                    try:
+                        ui.activeSelections.all = newSelection
+                    except:
+                        ui.messageBox('Cannot select this entity')
+                        ret = False
                 html_commands.append(ret)
             if html_commands:
                 htmlArgs.returnData = json.dumps(html_commands)
