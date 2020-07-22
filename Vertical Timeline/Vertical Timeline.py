@@ -6,206 +6,17 @@ import adsk.core, adsk.fusion, adsk.cam, traceback
 import json
 import os
 
-# Event handler for the commandExecuted event.
-class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            # Create and display the palette.
-            palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
-            if not palette:
-                palette = ui.palettes.add('thomasa88_verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
-                                          True, True, True, 250, 500, False)
-                palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
-    
-                # Add handler to HTMLEvent of the palette.
-                onHTMLEvent = MyHTMLEventHandler()
-                palette.incomingFromHTML.add(onHTMLEvent)   
-                handlers.append(onHTMLEvent)
-    
-                # Add handler to CloseEvent of the palette.
-                onClosed = MyCloseEventHandler()
-                palette.closed.add(onClosed)
-                handlers.append(onClosed)
-            else:
-                palette.isVisible = True                               
-        except:
-            ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
-
-# Event handler for the commandCreated event.
-class ShowPaletteCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            command = args.command
-            onExecute = ShowPaletteCommandExecuteHandler()
-            command.execute.add(onExecute)
-            handlers.append(onExecute)                                     
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc())) 
-
-# Event handler for the palette close event.
-class MyCloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            pass
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
-
-
-# Event handler for the palette HTML event.                
-class MyHTMLEventHandler(adsk.core.HTMLEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            htmlArgs = adsk.core.HTMLEventArgs.cast(args)
-            action = htmlArgs.action
-            data = json.loads(htmlArgs.data)
-            html_commands = []
-            if action == 'ready':
-                print('HTML ready')
-
-                # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
-                # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
-                html_commands.append(invalidate(send=False))
-            elif action == 'setFeatureName':
-                item = get_item_by_id_string(data['id'].split('-'))
-                if (not item.isGroup and
-                    item.entity.classType() == 'adsk::fusion::Occurrence'):
-                    item.entity.component.name = data['value']
-                    html_commands.append(True)
-                    html_commands.append(invalidate(send=False))
-                else:
-                    item.name = data['value']
-                    html_commands.append(True)
-            elif action == 'selectFeature':
-                ret = True
-                item = get_item_by_id_string(data['id'].split('-'))
-
-                if item.isSuppressed:
-                    ui.messageBox('Cannot select suppressed features')
-                    ret = False
-                elif item.isRolledBack:
-                    ui.messageBox('Cannot select rolled back features')
-                    ret = False
-                else:
-                    # Making this in a transactory way so the current selection is not removed
-                    # if the entity is not selectable.
-                    newSelection = adsk.core.ObjectCollection.create()
-                    newSelection.add(item.entity)
-                    try:
-                        ui.activeSelections.all = newSelection
-                    except:
-                        ui.messageBox('Cannot select this entity')
-                        ret = False
-                html_commands.append(ret)
-            if html_commands:
-                htmlArgs.returnData = json.dumps(html_commands)
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))   
-
-class CommandTerminationReason:
-    UnknownTerminationReason = 0
-    CompletedTerminationReason = 1
-    CancelledTerminationReason = 2
-    AbortedTerminationReason = 3
-    PreEmptedTerminationReason = 4
-    SessionEndingTerminationReason = 5
-
-class CommandTerminatedHandler(adsk.core.ApplicationCommandEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
-            
-            # As long as we don't update on command create, we only need to listen for command completion
-            if eventArgs.terminationReason != CommandTerminationReason.CompletedTerminationReason:
-                return
-
-            # Heavy traffic commands
-            if eventArgs.commandId in ['SelectCommand', 'CommitCommand']:
-                return
-            
-            invalidate()
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
-
 # global set of event handlers to keep them referenced for the duration of the command
 handlers = []
 ui = None
 app = None
 onCommandTerminated = None
 
-def run(context):
-    global ui, app, handlers
-    debug = False
-    try:
-        app = adsk.core.Application.get()
-        ui = app.userInterface
-
-         # Add a command that displays the panel.
-        showPaletteCmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
-
-        if not showPaletteCmdDef:
-            showPaletteCmdDef = ui.commandDefinitions.addButtonDefinition(
-                'thomasa88_showVerticalTimeline',
-                'Show Vertical Timeline',
-                'Vertical Timeline\n\n' +
-                'A vertical timeline, that shows feature names. Timeline functionality is limited.',
-                '')
-
-            # Connect to Command Created event.
-            onCommandCreated = ShowPaletteCommandCreatedHandler()
-            showPaletteCmdDef.commandCreated.add(onCommandCreated)
-            handlers.append(onCommandCreated)
-        
-        # Add the command to the toolbar.
-        panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
-        cntrl = panel.controls.itemById('thomasa88_showVerticalTimeline')
-        if not cntrl:
-            panel.controls.addCommand(showPaletteCmdDef)
-
-        global onCommandTerminated
-        onCommandTerminated = CommandTerminatedHandler()
-        ui.commandTerminated.add(onCommandTerminated)
-        handlers.append(onCommandTerminated)
-
-        print("Running")
-    except:
-        print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
-        if ui and not debug:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
-
-def stop(context):
-    try:
-        print('Stopping')
-
-        # Do we need to remove the commandTerminated handler or not?
-        if onCommandTerminated:
-            ui.commandTerminated.remove(onCommandTerminated)
-
-        # Delete the palette created by this add-in.
-        palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
-        if palette:
-            palette.deleteMe()
-
-        # Delete controls and associated command definitions created by this add-ins
-        panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
-        cmd = panel.controls.itemById('thomasa88_showVerticalTimeline')
-        if cmd:
-            cmd.deleteMe()
-        cmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
-        if cmdDef:
-            cmdDef.deleteMe()
-    except:
-        if ui:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+# Occurrence types
+OCCURRENCE_GENERAL_COMP = 0
+OCCURRENCE_COPY_COMP = 1
+OCCURRENCE_SHEET_METAL = 2
+OCCURRENCE_BODIES_COMP = 3
 
 def get_timeline():
     product = app.activeProduct
@@ -217,19 +28,23 @@ def get_timeline():
         # Not parametric design (?)
         return None
 
-def occurrence_feature_resource(item):
+def get_occurrence_type(item):
     if item.name.startswith('CopyPaste '):
-        # Copy component
-        return 'Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance'
+        return OCCURRENCE_COPY_COMP
     elif hasattr(item.entity, 'bRepBodies'):
         if item.entity.bRepBodies.count == 0:
-            # Sheet metal
-            return 'Neutron/UI/Base/Resources/Browser/ComponentSheetMetal'
+            return OCCURRENCE_SHEET_METAL
         else:
-            # Component from bodies
-            return 'Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody'
+            return OCCURRENCE_BODIES_COMP
     else:
-        return 'Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent'
+        return OCCURRENCE_GENERAL_COMP
+
+OCCURRENCE_RESOURCE_MAP = {
+    OCCURRENCE_GENERAL_COMP: 'Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent',
+    OCCURRENCE_COPY_COMP: 'Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance',
+    OCCURRENCE_SHEET_METAL: 'Neutron/UI/Base/Resources/Browser/ComponentSheetMetal',
+    OCCURRENCE_BODIES_COMP: 'Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody',
+}
 
 FEATURE_RESOURCE_MAP = {
     # This list is hand-crafted. Please respect the work put into this list and
@@ -238,7 +53,7 @@ FEATURE_RESOURCE_MAP = {
     'LoftFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/loft' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/loft',
     'Sketch': 'Fusion/UI/FusionUI/Resources/sketch/Sketch_feature',
     'ExtrudeFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/extrude' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/extrude',
-    'Occurrence': occurrence_feature_resource,
+    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[get_occurrence_type(i)],
     'BoundaryFillFeature': 'Fusion/UI/FusionUI/Resources/surface/surface_sculpt',
     'SurfaceDeleteFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/surface_delete',
     'CombineFeature': 'Fusion/UI/FusionUI/Resources/modify/combine',
@@ -327,11 +142,15 @@ def get_features(timeline_container, id_base=''):
         if not item.isGroup:
             feature['type'] = item.entity.classType().split('::')[-1]
             feature['image'] = get_feature_image(item)
+
             if feature['type'] == 'Occurrence':
-                feature['component-name'] = item.entity.component.name
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
                 # Strip the whitespace to make the list cleaner.
                 feature['name'] = feature['name'].lstrip()
+                if get_occurrence_type(item) != OCCURRENCE_BODIES_COMP:
+                    # Name is a read-only instance variant of the component's name
+                    # Let the user modify the component's name instead
+                    feature['component-name'] = item.entity.component.name
         else:
             feature['type'] = 'GROUP'
             feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Timeline/GroupFeature')
@@ -344,3 +163,200 @@ def get_item_by_id_string(id_string):
     for i in id_string:
         item = item[int(i)]
     return item
+
+def run(context):
+    global ui, app, handlers
+    debug = False
+    try:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+
+         # Add a command that displays the panel.
+        showPaletteCmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
+
+        if not showPaletteCmdDef:
+            showPaletteCmdDef = ui.commandDefinitions.addButtonDefinition(
+                'thomasa88_showVerticalTimeline',
+                'Show Vertical Timeline',
+                'Vertical Timeline\n\n' +
+                'A vertical timeline, that shows feature names. Timeline functionality is limited.',
+                '')
+
+            # Connect to Command Created event.
+            onCommandCreated = ShowPaletteCommandCreatedHandler()
+            showPaletteCmdDef.commandCreated.add(onCommandCreated)
+            handlers.append(onCommandCreated)
+        
+        # Add the command to the toolbar.
+        panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
+        cntrl = panel.controls.itemById('thomasa88_showVerticalTimeline')
+        if not cntrl:
+            panel.controls.addCommand(showPaletteCmdDef)
+
+        global onCommandTerminated
+        onCommandTerminated = CommandTerminatedHandler()
+        ui.commandTerminated.add(onCommandTerminated)
+        handlers.append(onCommandTerminated)
+
+        print("Running")
+    except:
+        print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+        if ui and not debug:
+            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+
+def stop(context):
+    try:
+        print('Stopping')
+
+        # Do we need to remove the commandTerminated handler or not?
+        if onCommandTerminated:
+            ui.commandTerminated.remove(onCommandTerminated)
+
+        # Delete the palette created by this add-in.
+        palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+        if palette:
+            palette.deleteMe()
+
+        # Delete controls and associated command definitions created by this add-ins
+        panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
+        cmd = panel.controls.itemById('thomasa88_showVerticalTimeline')
+        if cmd:
+            cmd.deleteMe()
+        cmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
+        if cmdDef:
+            cmdDef.deleteMe()
+    except:
+        if ui:
+            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+
+
+# Event handler for the commandExecuted event.
+class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        try:
+            # Create and display the palette.
+            palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+            if not palette:
+                palette = ui.palettes.add('thomasa88_verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
+                                          True, True, True, 250, 500, False)
+                palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
+    
+                # Add handler to HTMLEvent of the palette.
+                onHTMLEvent = MyHTMLEventHandler()
+                palette.incomingFromHTML.add(onHTMLEvent)   
+                handlers.append(onHTMLEvent)
+    
+                # Add handler to CloseEvent of the palette.
+                onClosed = MyCloseEventHandler()
+                palette.closed.add(onClosed)
+                handlers.append(onClosed)
+            else:
+                palette.isVisible = True                               
+        except:
+            ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
+
+# Event handler for the commandCreated event.
+class ShowPaletteCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        try:
+            command = args.command
+            onExecute = ShowPaletteCommandExecuteHandler()
+            command.execute.add(onExecute)
+            handlers.append(onExecute)                                     
+        except:
+            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc())) 
+
+# Event handler for the palette close event.
+class MyCloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        try:
+            pass
+        except:
+            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+
+# Event handler for the palette HTML event.                
+class MyHTMLEventHandler(adsk.core.HTMLEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        try:
+            htmlArgs = adsk.core.HTMLEventArgs.cast(args)
+            action = htmlArgs.action
+            data = json.loads(htmlArgs.data)
+            html_commands = []
+            if action == 'ready':
+                print('HTML ready')
+
+                # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
+                # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
+                html_commands.append(invalidate(send=False))
+            elif action == 'setFeatureName':
+                item = get_item_by_id_string(data['id'].split('-'))
+                if (not item.isGroup
+                    and item.entity.classType() == 'adsk::fusion::Occurrence'
+                    and get_occurrence_type(item) != OCCURRENCE_BODIES_COMP):
+                    item.entity.component.name = data['value']
+                    html_commands.append(True)
+                    html_commands.append(invalidate(send=False))
+                else:
+                    item.name = data['value']
+                    html_commands.append(True)
+            elif action == 'selectFeature':
+                ret = True
+                item = get_item_by_id_string(data['id'].split('-'))
+
+                if item.isSuppressed:
+                    ui.messageBox('Cannot select suppressed features')
+                    ret = False
+                elif item.isRolledBack:
+                    ui.messageBox('Cannot select rolled back features')
+                    ret = False
+                else:
+                    # Making this in a transactory way so the current selection is not removed
+                    # if the entity is not selectable.
+                    newSelection = adsk.core.ObjectCollection.create()
+                    newSelection.add(item.entity)
+                    try:
+                        ui.activeSelections.all = newSelection
+                    except:
+                        ui.messageBox('Cannot select this entity')
+                        ret = False
+                html_commands.append(ret)
+            if html_commands:
+                htmlArgs.returnData = json.dumps(html_commands)
+        except:
+            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))   
+
+class CommandTerminationReason:
+    UnknownTerminationReason = 0
+    CompletedTerminationReason = 1
+    CancelledTerminationReason = 2
+    AbortedTerminationReason = 3
+    PreEmptedTerminationReason = 4
+    SessionEndingTerminationReason = 5
+
+class CommandTerminatedHandler(adsk.core.ApplicationCommandEventHandler):
+    def __init__(self):
+        super().__init__()
+    def notify(self, args):
+        try:
+            eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
+            
+            # As long as we don't update on command create, we only need to listen for command completion
+            if eventArgs.terminationReason != CommandTerminationReason.CompletedTerminationReason:
+                return
+
+            # Heavy traffic commands
+            if eventArgs.commandId in ['SelectCommand', 'CommitCommand']:
+                return
+            
+            invalidate()
+        except:
+            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+
