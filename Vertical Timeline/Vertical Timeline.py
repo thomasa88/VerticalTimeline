@@ -8,9 +8,11 @@ import os
 
 # global set of event handlers to keep them referenced for the duration of the command
 handlers = []
+
 ui = None
 app = None
 onCommandTerminated = None
+enabled = False
 
 # Occurrence types
 OCCURRENCE_GENERAL_COMP = 0
@@ -20,6 +22,10 @@ OCCURRENCE_BODIES_COMP = 3
 
 def get_timeline():
     product = app.activeProduct
+
+    if product is None or product.classType() != 'adsk::fusion::Design':
+        return None
+    
     design = adsk.fusion.Design.cast(product)
 
     try:
@@ -128,14 +134,17 @@ def invalidate(send=True, emptyTimeline=False):
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
 
     if not palette:
-        print("Should not try to invalidate when the palette is not shown.")
+        print("Should not try to invalidate when the palette is not created.")
         return
 
-    timeline = get_timeline()
     if emptyTimeline:
         features = []
     else:
-        features = get_features(timeline)
+        timeline = get_timeline()
+        if timeline is not None:
+            features = get_features(timeline)
+        else:
+            features = []
     
     features_cache = features
 
@@ -188,7 +197,9 @@ def error_catcher_wrapper(func):
         try:
             func(args)
         except:
-            ui.messageBox(f'Vertical Timeline failed:\n{traceback.format_exc()}')
+            print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+            if ui:
+                ui.messageBox(f'Vertical Timeline failed:\n{traceback.format_exc()}')
     return catcher
 
 def create_handler(base_class, notify_callback):
@@ -235,8 +246,13 @@ def run(context):
         app.documentDeactivating.add(create_handler(adsk.core.DocumentEventHandler,
                                                     document_deactivating_handler))
 
-        app.documentActivated.add(create_handler(adsk.core.DocumentEventHandler,
-                                                 document_activated_handler))
+        # Fusion bug: Activated is not called when switching to/from Drawing.
+        # Using documentActivating instead, but things might not have loaded yet.
+        # https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
+        #app.documentActivated.add(create_handler(adsk.core.DocumentEventHandler,
+        #                                         document_activated_handler))
+        app.documentActivating.add(create_handler(adsk.core.DocumentEventHandler,
+                                                  document_activated_handler))
 
         print("Running")
     except:
@@ -271,26 +287,34 @@ class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
         super().__init__()
     def notify(self, args):
         try:
-            # Create and display the palette.
-            palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
-            if not palette:
-                palette = ui.palettes.add('thomasa88_verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
-                                          True, True, True, 250, 500, False)
-                palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
-    
-                # Add handler to HTMLEvent of the palette.
-                onHTMLEvent = HTMLEventHandler()
-                palette.incomingFromHTML.add(onHTMLEvent)   
-                handlers.append(onHTMLEvent)
-    
-                # Add handler to CloseEvent of the palette.
-                onClosed = CloseEventHandler()
-                palette.closed.add(onClosed)
-                handlers.append(onClosed)
-            else:
-                palette.isVisible = True                               
+            global enabled
+            enabled = True
+            show_palette()
         except:
             ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
+
+def show_palette():
+    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+    if not palette:
+        palette = ui.palettes.add('thomasa88_verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
+                                    True, True, True, 250, 500, False)
+        palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
+
+        onHTMLEvent = HTMLEventHandler()
+        palette.incomingFromHTML.add(onHTMLEvent)   
+        handlers.append(onHTMLEvent)
+
+        onClosed = CloseEventHandler()
+        palette.closed.add(onClosed)
+        handlers.append(onClosed)
+    elif not palette.isVisible:
+            palette.isVisible = True
+            invalidate()
+
+def hide_palette():
+    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+    if palette:
+        palette.isVisible = False
 
 # Event handler for the commandCreated event.
 def show_palette_command_created_handler(args):
@@ -298,6 +322,7 @@ def show_palette_command_created_handler(args):
         onExecute = ShowPaletteCommandExecuteHandler()
         command.execute.add(onExecute)
         handlers.append(onExecute)
+        enabled = True
 
 # Event handler for the palette close event.
 class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
@@ -305,7 +330,8 @@ class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
         super().__init__()
     def notify(self, args):
         try:
-            pass
+            global enabled
+            enabled = False
         except:
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
@@ -385,9 +411,17 @@ def command_terminated_handler(args):
     invalidate()
 
 def document_deactivating_handler(args):
-        eventArgs = adsk.core.DocumentEventArgs.cast(args)
-        invalidate(emptyTimeline=True)
+    #eventArgs = adsk.core.DocumentEventArgs.cast(args)
+    invalidate(emptyTimeline=True)
 
 def document_activated_handler(args):
-        eventArgs = adsk.core.DocumentEventArgs.cast(args)
-        invalidate()
+    #eventArgs = adsk.core.DocumentEventArgs.cast(args)
+    #product = app.activeProduct
+    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+    #if product and product.classType() == 'adsk::fusion::Design':
+    if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+        if enabled:
+            show_palette()
+    else:
+        # Deactivate
+        hide_palette()
