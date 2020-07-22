@@ -57,6 +57,21 @@ FEATURE_RESOURCE_MAP = {
     'BoundaryFillFeature': 'Fusion/UI/FusionUI/Resources/surface/surface_sculpt',
     'SurfaceDeleteFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/surface_delete',
     'CombineFeature': 'Fusion/UI/FusionUI/Resources/modify/combine',
+    'RevolveFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/revolve' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/revolve',
+    'SweepFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/sweep' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/sweep',
+    'RibFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/rib',
+    'WebFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/web',
+    'BoxFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/primitive_box',
+    'CylinderFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_cylinder',
+    'SphereFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_sphere',
+    'TorusFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_torus',
+    'CoilFeature': 'Fusion/UI/FusionUI/Resources/solid/Coil',
+    'PipeFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_pipe',
+    'RectangularPatternFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_rectangular',
+    'CircularPatternFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_circular',
+    'PathPatternFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_path',
+    'MirrorFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_mirror',
+    'ThickenFeature': 'Fusion/UI/FusionUI/Resources/surface/thicken',
 }
 
 def get_feature_image(item):
@@ -68,7 +83,7 @@ def get_feature_image(item):
 
     if not match:
         # Image not mapped
-        match = 'finish/finishX'
+        match = 'Fusion/UI/FusionUI/Resources/finish/finishX'
     
     return get_image_path(match)
 
