@@ -61,14 +61,14 @@ OCCURRENCE_RESOURCE_MAP = {
 FEATURE_RESOURCE_MAP = {
     # This list is hand-crafted. Please respect the work put into this list and
     # retain the Copyright and License stanzas if you copy it.
-    # Helpful toosl: ImageSorter, Process Monitor.
-    'LoftFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/loft' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/loft',
+    # Helpful tools: trace_feature_image function, ImageSorter, Process Monitor.
     'Sketch': 'Fusion/UI/FusionUI/Resources/sketch/Sketch_feature',
+    'FormFeature': 'Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation',
+    'LoftFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/loft' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/loft',
     'ExtrudeFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/extrude' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/extrude',
     'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[get_occurrence_type(i)],
     'BoundaryFillFeature': 'Fusion/UI/FusionUI/Resources/surface/surface_sculpt',
     'SurfaceDeleteFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/surface_delete',
-    'CombineFeature': 'Fusion/UI/FusionUI/Resources/modify/combine',
     'RevolveFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/revolve' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/revolve',
     'SweepFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/sweep' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/sweep',
     'RibFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/rib',
@@ -84,6 +84,38 @@ FEATURE_RESOURCE_MAP = {
     'PathPatternFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_path',
     'MirrorFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_mirror',
     'ThickenFeature': 'Fusion/UI/FusionUI/Resources/surface/thicken',
+    'BaseFeature': 'Fusion/UI/FusionUI/Resources/Modeling/BaseFeature',
+
+    # Solid Modify
+    'FilletFeature': 'Fusion/UI/FusionUI/Resources/Modeling/FilletEdges',
+    'ChamferFeature': 'Fusion/UI/FusionUI/Resources/Modeling/Chamfer',
+    'ShellFeature': 'Fusion/UI/FusionUI/Resources/Modeling/ShellBody',
+    'DraftFeature': 'Fusion/UI/FusionUI/Resources/solid/draft',
+    'ScaleFeature': 'Fusion/UI/FusionUI/Resources/modify/scale',
+    'CombineFeature': 'Fusion/UI/FusionUI/Resources/modify/combine',
+    'ReplaceFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/replace_face',
+    'SplitFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/split_face',
+    'SplitBodyFeature': 'Fusion/UI/FusionUI/Resources/modify/split',
+
+    # Surface Create only
+    'OffsetFacesFeature': 'Fusion/UI/FusionUI/Resources/Modeling/OffsetFaces',
+    'PatchFeature': 'Fusion/UI/FusionUI/Resources/surface/patch',
+    'RuledSurfaceFeature': 'Fusion/UI/FusionUI/Resources/surface/ruled',
+    'OffsetFeature': 'Fusion/UI/FusionUI/Resources/surface/offset',
+
+    # Surface Modify only
+    'TrimFeature': 'Fusion/UI/FusionUI/Resources/surface/trim',
+    'ExtendFeature': 'Fusion/UI/FusionUI/Resources/surface/extend',
+    'StitchFeature': 'Fusion/UI/FusionUI/Resources/surface/stitch',
+    'UnstitchFeature': 'Fusion/UI/FusionUI/Resources/surface/unstitch',
+    'ReverseNormalFeature': 'Fusion/UI/FusionUI/Resources/modify/surface_reverse_normal',
+
+    # Assembly
+    'Joint': 'Fusion/UI/FusionUI/Resources/Assembly/joint',
+    'AsBuiltJoint': 'Fusion/UI/FusionUI/Resources/Assembly/JointAsBuilt',
+    'JointOrigin': 'Fusion/UI/FusionUI/Resources/construction/jointorigin',
+    'RigidGroup': 'Fusion/UI/FusionUI/Resources/Assembly/RigidGroup',
+    'Snapshot': 'Fusion/UI/FusionUI/Resources/Assembly/Snapshot',
 }
 
 def get_feature_image(item):
@@ -173,15 +205,25 @@ def invalidate(send=True, clear=False):
 def get_features(timeline_container, id_base=''):
     features = []
     for i, item in enumerate(timeline_container):
-        classType = item.classType()
         feature = {
             'id': f'{id_base}{i}',
             'name': item.name,
             'suppressed': item.isSuppressed or item.isRolledBack,
             }
         if not item.isGroup:
-            feature['type'] = item.entity.classType().split('::')[-1]
-            feature['image'] = get_feature_image(item)
+            try:
+                entity = item.entity
+            except RuntimeError as e:
+                entity = None
+            
+            if entity:
+                feature['type'] = item.entity.classType().split('::')[-1]
+                feature['image'] = get_feature_image(item)
+            else:
+                # Move and Align does not allow us to access their entity attribute
+                # Assuming Move type.
+                feature['type'] = 'Move'
+                feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Assembly/Move')
 
             if feature['type'] == 'Occurrence':
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
@@ -381,13 +423,20 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                 ret = True
                 if data['value'] == '':
                     ret = False
-                elif (not item.isGroup
-                    and item.entity.classType() == 'adsk::fusion::Occurrence'
-                    and get_occurrence_type(item) != OCCURRENCE_BODIES_COMP):
-                    item.entity.component.name = data['value']
-                    html_commands.append(invalidate(send=False))
                 else:
-                    item.name = data['value']
+                    try:
+                        entity = item.entity
+                    except RuntimeError:
+                        # Move and Align does not allow us to access their entity attribute
+                        entity = None
+                    if (not item.isGroup
+                        and entity
+                        and entity.classType() == 'adsk::fusion::Occurrence'
+                        and get_occurrence_type(item) != OCCURRENCE_BODIES_COMP):
+                        entity.component.name = data['value']
+                        html_commands.append(invalidate(send=False))
+                    else:
+                        item.name = data['value']
                 html_commands.append(ret)
             elif action == 'selectFeature':
                 ret = True
@@ -406,8 +455,8 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                     newSelection.add(item.entity)
                     try:
                         ui.activeSelections.all = newSelection
-                    except:
-                        ui.messageBox('Cannot select this entity')
+                    except Exception as e:
+                        ui.messageBox(f'Failed to select this entity: {e}')
                         ret = False
                 html_commands.append(ret)
             if html_commands:
@@ -431,11 +480,28 @@ def command_terminated_handler(args):
     if eventArgs.terminationReason != CommandTerminationReason.CompletedTerminationReason:
         return
 
+    # Helper to trace feature images
+    #trace_feature_image(eventArgs)
+
     # Heavy traffic commands
     if eventArgs.commandId in ['SelectCommand', 'CommitCommand']:
         return
     
     invalidate()
+
+def trace_feature_image(command_terminated_event_args):
+    ''' Development function to trace feature images '''
+    _, timeline = get_timeline()
+    feature = None
+    if timeline:
+        try:
+            feature = timeline.item(timeline.count-1).entity.classType().replace('adsk::fusion::', '')
+        except Exception as e:
+            feature = str(e)
+    folder = command_terminated_event_args.commandDefinition.resourceFolder
+    if folder:
+        folder = folder.replace(get_product_deploy_folder() + '/', '')
+    print(f"'{feature}': '{folder}',")
 
 #########################################################################################
 # app.product is not ready at workspaceActivated, but documentActivated does not fire
