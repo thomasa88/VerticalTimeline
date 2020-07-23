@@ -1,6 +1,9 @@
 #Author-Thomas Axelsson
 #Description-Provides a vertical timeline.
 
+# Need to use Visual Studio Code Python extension version 2019.9.34911
+# to be able to debug with Fusion.. (2020-07-23)
+
 import adsk.core, adsk.fusion, adsk.cam, traceback
 
 import json
@@ -22,16 +25,15 @@ OCCURRENCE_BODIES_COMP = 3
 
 def get_timeline():
     product = app.activeProduct
-
     if product is None or product.classType() != 'adsk::fusion::Design':
+        print("get_timeline: Product not ready")
         return None
     
     design = adsk.fusion.Design.cast(product)
 
-    try:
+    if design.designType == adsk.fusion.DesignTypes.ParametricDesignType:
         return design.timeline
-    except RuntimeError:
-        # Not parametric design (?)
+    else:
         return None
 
 def get_occurrence_type(item):
@@ -134,7 +136,6 @@ def invalidate(send=True, emptyTimeline=False):
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
 
     if not palette:
-        print("Should not try to invalidate when the palette is not created.")
         return
 
     if emptyTimeline:
@@ -145,7 +146,6 @@ def invalidate(send=True, emptyTimeline=False):
             features = get_features(timeline)
         else:
             features = []
-    
     features_cache = features
 
     action = 'setTimeline'
@@ -202,15 +202,15 @@ def error_catcher_wrapper(func):
                 ui.messageBox(f'Vertical Timeline failed:\n{traceback.format_exc()}')
     return catcher
 
-def create_handler(base_class, notify_callback):
+def add_handler(event, base_class, notify_callback):
     handler_name = base_class.__name__ + 'Handler'
     handler_class = type(handler_name, (base_class,),
                          { "notify": error_catcher_wrapper(notify_callback) })
     handler_class.__init__ = lambda self: super(handler_class, self).__init__()
     handler = handler_class()
     # Avoid garbage collection
-    handlers.append(handler)
-    return handler
+    handlers.append((handler, event))
+    event.add(handler)
 
 def run(context):
     global ui, app, handlers
@@ -230,8 +230,9 @@ def run(context):
                 'A vertical timeline, that shows feature names. Timeline functionality is limited.',
                 '')
 
-            showPaletteCmdDef.commandCreated.add(create_handler(adsk.core.CommandCreatedEventHandler,
-                                                 show_palette_command_created_handler))
+            add_handler(showPaletteCmdDef.commandCreated,
+                        adsk.core.CommandCreatedEventHandler,
+                        show_palette_command_created_handler)
         
         # Add the command to the toolbar.
         panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
@@ -239,20 +240,23 @@ def run(context):
         if not cntrl:
             panel.controls.addCommand(showPaletteCmdDef)
         
-        # Need to unregister handlers at stop()?
-        ui.commandTerminated.add(create_handler(adsk.core.ApplicationCommandEventHandler,
-                                                command_terminated_handler))
-
-        app.documentDeactivating.add(create_handler(adsk.core.DocumentEventHandler,
-                                                    document_deactivating_handler))
+        add_handler(ui.commandTerminated,
+                    adsk.core.ApplicationCommandEventHandler,
+                    command_terminated_handler)
 
         # Fusion bug: Activated is not called when switching to/from Drawing.
-        # Using documentActivating instead, but things might not have loaded yet.
         # https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
-        #app.documentActivated.add(create_handler(adsk.core.DocumentEventHandler,
-        #                                         document_activated_handler))
-        app.documentActivating.add(create_handler(adsk.core.DocumentEventHandler,
-                                                  document_activated_handler))
+        add_handler(app.documentActivated,
+                    adsk.core.DocumentEventHandler,
+                    document_activated_handler)
+
+        add_handler(ui.workspacePreDeactivate,
+                    adsk.core.WorkspaceEventHandler,
+                    workspace_pre_deactivate_handler)
+
+        add_handler(ui.workspaceActivated,
+                    adsk.core.WorkspaceEventHandler,
+                    workspace_activated_handler)
 
         print("Running")
     except:
@@ -263,6 +267,10 @@ def run(context):
 def stop(context):
     try:
         print('Stopping')
+
+        for handler, event in handlers:
+            event.remove(handler)
+        handlers.clear()
 
         # Delete the palette created by this add-in.
         palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
@@ -289,7 +297,11 @@ class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
         try:
             global enabled
             enabled = True
-            show_palette()
+            if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+                show_palette()
+            else:
+                ui.messageBox('Vertical Timeline cannot be shown in this workspace. ' +
+                              'It will be shown when you open a Design.')
         except:
             ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
 
@@ -302,14 +314,15 @@ def show_palette():
 
         onHTMLEvent = HTMLEventHandler()
         palette.incomingFromHTML.add(onHTMLEvent)   
-        handlers.append(onHTMLEvent)
+        handlers.append((onHTMLEvent, palette.incomingFromHTML))
 
         onClosed = CloseEventHandler()
         palette.closed.add(onClosed)
-        handlers.append(onClosed)
-    elif not palette.isVisible:
+        handlers.append((onClosed, palette.closed))
+    else:
+        invalidate()
+        if not palette.isVisible:
             palette.isVisible = True
-            invalidate()
 
 def hide_palette():
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
@@ -321,7 +334,7 @@ def show_palette_command_created_handler(args):
         command = args.command
         onExecute = ShowPaletteCommandExecuteHandler()
         command.execute.add(onExecute)
-        handlers.append(onExecute)
+        handlers.append((onExecute, command.execute))
         enabled = True
 
 # Event handler for the palette close event.
@@ -401,7 +414,7 @@ class CommandTerminationReason:
 
 def command_terminated_handler(args):
     eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
-    
+
     # As long as we don't update on command create, we only need to listen for command completion
     if eventArgs.terminationReason != CommandTerminationReason.CompletedTerminationReason:
         return
@@ -412,18 +425,41 @@ def command_terminated_handler(args):
     
     invalidate()
 
-def document_deactivating_handler(args):
-    #eventArgs = adsk.core.DocumentEventArgs.cast(args)
-    invalidate(emptyTimeline=True)
+#########################################################################################
+# app.product is not ready at workspaceActivated, but documentActivated does not fire
+# when switching to/from Drawing. However, in that case, it seems that the product is
+# ready when we call get_timeline (presumably since the panel has to be recreated)
+# Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
+#
+# PLM360OpenAttachmentCommand + MarkDocumentsForOpenCommand could possibly be used as
+# another workaround.
+#
+# Event order:
+# DocumentActivating
+# OnWorkspaceActivated
+# DocumentActivated
+# PLM360OpenAttachmentCommand or MarkDocumentsForOpenCommand
+#
 
-def document_activated_handler(args):
+def workspace_pre_deactivate_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
-    #product = app.activeProduct
-    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
-    #if product and product.classType() == 'adsk::fusion::Design':
+    if enabled:
+        invalidate(emptyTimeline=True)
+
+def workspace_activated_handler(args):
+    #eventArgs = adsk.core.WorkspaceEventArgs.cast(args)
+
     if ui.activeWorkspace.id == 'FusionSolidEnvironment':
         if enabled:
             show_palette()
     else:
         # Deactivate
         hide_palette()
+
+def document_activated_handler(args):
+    #eventArgs = adsk.core.DocumentEventArgs.cast(args)
+    if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+        if enabled:
+            show_palette()
+
+#########################################################################################
