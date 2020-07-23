@@ -15,7 +15,8 @@ handlers = []
 ui = None
 app = None
 onCommandTerminated = None
-enabled = False
+
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'settings.json')
 
 # Occurrence types
 OCCURRENCE_GENERAL_COMP = 0
@@ -26,6 +27,26 @@ OCCURRENCE_BODIES_COMP = 3
 TIMELINE_STATUS_OK = 0
 TIMELINE_STATUS_PRODUCT_NOT_READY = 1
 TIMELINE_STATUS_NOT_PARAMETRIC = 2
+
+_settings = None
+def getEnabled():
+    global _settings
+    if _settings is None:
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                _settings = json.load(f)
+        except FileNotFoundError:
+            _settings = {}
+            _settings['enabled'] = False
+    return _settings['enabled']
+
+def setEnabled(value):
+    global _settings
+    if _settings is None:
+        _settings = {}
+    _settings['enabled'] = value
+    with open(SETTINGS_FILE, 'w+') as f:
+        json.dump(_settings, f)
 
 def get_timeline():
     product = app.activeProduct
@@ -338,6 +359,9 @@ def run(context):
                     workspace_activated_handler)
 
         print("Running")
+
+        if getEnabled():
+            show_palette()
     except:
         print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
         if ui and not debug:
@@ -374,9 +398,9 @@ class TogglePaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
         super().__init__()
     def notify(self, args):
         try:
-            global enabled
-            enabled = not enabled
-            if enabled:
+            enable = not getEnabled()
+            setEnabled(enable)
+            if enable:
                 if ui.activeWorkspace.id == 'FusionSolidEnvironment':
                     show_palette()
                 else:
@@ -424,8 +448,7 @@ class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
         super().__init__()
     def notify(self, args):
         try:
-            global enabled
-            enabled = False
+            setEnabled(False)
         except:
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
@@ -548,14 +571,14 @@ def trace_feature_image(command_terminated_event_args):
 
 def workspace_pre_deactivate_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
-    if enabled:
+    if getEnabled():
         invalidate(clear=True)
 
 def workspace_activated_handler(args):
     #eventArgs = adsk.core.WorkspaceEventArgs.cast(args)
 
     if ui.activeWorkspace.id == 'FusionSolidEnvironment':
-        if enabled:
+        if getEnabled():
             show_palette()
     else:
         # Deactivate
@@ -564,7 +587,7 @@ def workspace_activated_handler(args):
 def document_activated_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
     if ui.activeWorkspace.id == 'FusionSolidEnvironment':
-        if enabled:
+        if getEnabled():
             show_palette()
 
 #########################################################################################
