@@ -4,7 +4,7 @@
         <style>
             body {
                 font-family: Arial, Helvetica, sans-serif;
-                font-size: 12px;
+                font-size: 11px;
             }
             #content {
                 display: flex;
@@ -17,8 +17,7 @@
                 overflow: hidden;
                 white-space: nowrap;
                 text-overflow: ellipsis;
-                padding-top: 3px;
-                padding-bottom: 3px;
+                height: 20px;
             }
             .suppressed {
                 opacity: 0.5;
@@ -26,7 +25,11 @@
             .icon {
                 width: 16px;
                 height: 16px;
-                vertical-align: text-top;
+                vertical-align: middle;
+                padding: 2px;
+            }
+            .icon:hover {
+                background-color: #d9d9d9;
             }
             .name {
                 margin-left: 5px;
@@ -143,7 +146,7 @@
 
     function onFeatureEditBlur(e) {
         let item = e.target.parentElement;
-        
+
         if (cancelingEdit) {
             cancelingEdit = false;
             item.querySelector('.name').innerText = item.getAttribute('data-name')
