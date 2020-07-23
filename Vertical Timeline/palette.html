@@ -55,6 +55,8 @@
         </div>
     </body>
     <script>
+    var cancelingEdit = false;
+
     window.fusionJavaScriptHandler = {handle: function(action, jsonData){
         console.log("Got command:", action);
         data = JSON.parse(jsonData);
@@ -112,7 +114,7 @@
             name.classList.add('name');
             name.innerText = feature.name;
             name.contentEditable = true;
-            name.addEventListener('keypress', onFeatureEdit);
+            name.addEventListener('keydown', onFeatureEdit);
             name.addEventListener('blur', onFeatureEditBlur);
             name.addEventListener('focus', onFeatureEditFocus);
             listItem.appendChild(name);
@@ -130,7 +132,8 @@
         ESC_KEY = 27;
         ENTER_KEY = 13;
         if (e.which == ESC_KEY) {
-            item.querySelector('.name').innerText = item.getAttribute('data-name');
+            cancelingEdit = true;
+            e.target.blur();
             e.preventDefault();
         } else if (e.which == ENTER_KEY) {
             e.target.blur();
@@ -140,6 +143,13 @@
 
     function onFeatureEditBlur(e) {
         let item = e.target.parentElement;
+        
+        if (cancelingEdit) {
+            cancelingEdit = false;
+            item.querySelector('.name').innerText = item.getAttribute('data-name')
+            return;
+        }
+
         let hasComponentName = item.hasAttribute('data-component-name');
 
         storeFeatureName(item);
