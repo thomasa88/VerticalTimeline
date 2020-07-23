@@ -353,15 +353,17 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                 html_commands.append(invalidate(send=False))
             elif action == 'setFeatureName':
                 item = get_item_by_id_string(data['id'].split('-'))
-                if (not item.isGroup
+                ret = True
+                if data['value'] == '':
+                    ret = False
+                elif (not item.isGroup
                     and item.entity.classType() == 'adsk::fusion::Occurrence'
                     and get_occurrence_type(item) != OCCURRENCE_BODIES_COMP):
                     item.entity.component.name = data['value']
-                    html_commands.append(True)
                     html_commands.append(invalidate(send=False))
                 else:
                     item.name = data['value']
-                    html_commands.append(True)
+                html_commands.append(ret)
             elif action == 'selectFeature':
                 ret = True
                 item = get_item_by_id_string(data['id'].split('-'))
