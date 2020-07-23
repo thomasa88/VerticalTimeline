@@ -283,6 +283,12 @@ def add_handler(event, base_class, notify_callback):
     handlers.append((handler, event))
     event.add(handler)
 
+def get_view_drop_down():
+    qat = ui.toolbars.itemById('QAT')
+    file_drop_down = qat.controls.itemById('FileSubMenuCommand')
+    view_drop_down = file_drop_down.controls.itemById('ViewWidgetCommand')
+    return view_drop_down
+
 def run(context):
     global ui, app, handlers
     debug = False
@@ -290,26 +296,28 @@ def run(context):
         app = adsk.core.Application.get()
         ui = app.userInterface
 
-         # Add a command that displays the panel.
-        showPaletteCmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
+        # Add a command that displays the palette
+        toggle_palette_cmd_def = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
 
-        if not showPaletteCmdDef:
-            showPaletteCmdDef = ui.commandDefinitions.addButtonDefinition(
+        if not toggle_palette_cmd_def:
+            toggle_palette_cmd_def = ui.commandDefinitions.addButtonDefinition(
                 'thomasa88_showVerticalTimeline',
-                'Show Vertical Timeline',
+                'Toggle Vertical Timeline',
                 'Vertical Timeline\n\n' +
                 'A vertical timeline, that shows feature names. Timeline functionality is limited.',
                 '')
 
-            add_handler(showPaletteCmdDef.commandCreated,
+            add_handler(toggle_palette_cmd_def.commandCreated,
                         adsk.core.CommandCreatedEventHandler,
-                        show_palette_command_created_handler)
+                        toggle_palette_command_created_handler)
         
-        # Add the command to the toolbar.
-        panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
-        cntrl = panel.controls.itemById('thomasa88_showVerticalTimeline')
+        # Add the command to the View menu
+        view_drop_down = get_view_drop_down()
+        
+        cntrl = view_drop_down.controls.itemById('thomasa88_showVerticalTimeline')
         if not cntrl:
-            panel.controls.addCommand(showPaletteCmdDef)
+            view_drop_down.controls.addCommand(toggle_palette_cmd_def,
+                                               'SeparatorAfter_DashboardModeCloseCommand', False) 
         
         add_handler(ui.commandTerminated,
                     adsk.core.ApplicationCommandEventHandler,
@@ -349,10 +357,10 @@ def stop(context):
             palette.deleteMe()
 
         # Delete controls and associated command definitions created by this add-ins
-        panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
-        cmd = panel.controls.itemById('thomasa88_showVerticalTimeline')
-        if cmd:
-            cmd.deleteMe()
+        view_drop_down = get_view_drop_down()
+        cntrl = view_drop_down.controls.itemById('thomasa88_showVerticalTimeline')
+        if cntrl:
+            cntrl.deleteMe()
         cmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
         if cmdDef:
             cmdDef.deleteMe()
@@ -361,18 +369,21 @@ def stop(context):
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
 
-class ShowPaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
+class TogglePaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
     def __init__(self):
         super().__init__()
     def notify(self, args):
         try:
             global enabled
-            enabled = True
-            if ui.activeWorkspace.id == 'FusionSolidEnvironment':
-                show_palette()
+            enabled = not enabled
+            if enabled:
+                if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+                    show_palette()
+                else:
+                    ui.messageBox('Vertical Timeline cannot be shown in this workspace. ' +
+                                'It will be shown when you open a Design.')
             else:
-                ui.messageBox('Vertical Timeline cannot be shown in this workspace. ' +
-                              'It will be shown when you open a Design.')
+                hide_palette()
         except:
             ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
 
@@ -401,12 +412,11 @@ def hide_palette():
         palette.isVisible = False
 
 # Event handler for the commandCreated event.
-def show_palette_command_created_handler(args):
+def toggle_palette_command_created_handler(args):
         command = args.command
-        onExecute = ShowPaletteCommandExecuteHandler()
+        onExecute = TogglePaletteCommandExecuteHandler()
         command.execute.add(onExecute)
         handlers.append((onExecute, command.execute))
-        enabled = True
 
 # Event handler for the palette close event.
 class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
