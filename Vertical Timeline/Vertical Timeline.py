@@ -51,11 +51,25 @@ def get_occurrence_type(item):
     else:
         return OCCURRENCE_GENERAL_COMP
 
+def short_class(obj):
+    return obj.classType().split('::')[-1]
+
 OCCURRENCE_RESOURCE_MAP = {
     OCCURRENCE_GENERAL_COMP: 'Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent',
     OCCURRENCE_COPY_COMP: 'Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance',
     OCCURRENCE_SHEET_METAL: 'Neutron/UI/Base/Resources/Browser/ComponentSheetMetal',
     OCCURRENCE_BODIES_COMP: 'Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody',
+}
+
+PLANE_RESOURCE_MAP = {
+    'ConstructionPlaneOffsetDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_offset',
+    'ConstructionPlaneAtAngleDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_angle',
+    'ConstructionPlaneTangentDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_tangent',
+    'ConstructionPlaneMidplaneDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_midplane',
+    'ConstructionPlaneTwoEdgesDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_two_axis',
+    'ConstructionPlaneThreePointsDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_three_points',
+    'ConstructionPlaneTangentAtPointDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_point_face',
+    'ConstructionPlaneDistanceOnPathDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_onpath',
 }
 
 FEATURE_RESOURCE_MAP = {
@@ -116,11 +130,14 @@ FEATURE_RESOURCE_MAP = {
     'JointOrigin': 'Fusion/UI/FusionUI/Resources/construction/jointorigin',
     'RigidGroup': 'Fusion/UI/FusionUI/Resources/Assembly/RigidGroup',
     'Snapshot': 'Fusion/UI/FusionUI/Resources/Assembly/Snapshot',
+
+    # Planes
+    'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(short_class(i.entity.definition)),
 }
 
 def get_feature_image(item):
     entity = item.entity
-    fusionType = entity.classType().replace('adsk::fusion::', '')
+    fusionType = short_class(entity)
     match = FEATURE_RESOURCE_MAP.get(fusionType)
     if callable(match):
         match = match(item)
@@ -217,7 +234,7 @@ def get_features(timeline_container, id_base=''):
                 entity = None
             
             if entity:
-                feature['type'] = item.entity.classType().split('::')[-1]
+                feature['type'] = short_class(item.entity)
                 feature['image'] = get_feature_image(item)
             else:
                 # Move and Align does not allow us to access their entity attribute
@@ -495,7 +512,7 @@ def trace_feature_image(command_terminated_event_args):
     feature = None
     if timeline:
         try:
-            feature = timeline.item(timeline.count-1).entity.classType().replace('adsk::fusion::', '')
+            feature = short_class(timeline.item(timeline.count-1).entity)
         except Exception as e:
             feature = str(e)
     folder = command_terminated_event_args.commandDefinition.resourceFolder
