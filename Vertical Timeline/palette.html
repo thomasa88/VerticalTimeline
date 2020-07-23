@@ -2,6 +2,10 @@
 <html>
     <head>
         <style>
+            body {
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 12px;
+            }
             #content {
                 display: flex;
                 flex-direction: column;
@@ -10,7 +14,6 @@
             }
             .feature {
                 list-style-type: none;
-                font-size: 12px;
                 overflow: hidden;
                 white-space: nowrap;
                 text-overflow: ellipsis;
@@ -27,7 +30,6 @@
             }
             .name {
                 margin-left: 5px;
-                font-family: Arial, Helvetica, sans-serif;
             }
             .name:hover {
                 outline: 1px solid silver;
@@ -39,8 +41,13 @@
     </head>
     <body>
         <div id="content">
-            <div id="timeline">
-            
+            <div>
+                <div id="message">
+                    Loading...
+                </div>
+                <div id="timeline">
+                    
+                </div>
             </div>
             <div>
                  by Thomas Axelsson 2020
@@ -58,11 +65,12 @@
         try {
             switch (action) {
                 case 'setTimeline':
-                    let timeline = document.getElementById('timeline');
-                    let items = data;
+                    let message = document.getElementById('message');
+                    message.innerText = data['message'];
 
+                    let timeline = document.getElementById('timeline');
                     timeline.innerHTML = '';
-                    appendItems(timeline, items)
+                    appendItems(timeline, data['features'])
 
                     break;
                 case 'debugger':
@@ -77,40 +85,40 @@
         return 'OK';
     }
 
-    function appendItems(parent, items) {
+    function appendItems(parent, features) {
         let list = document.createElement('ul');
-        for (const item of items) {
+        for (const feature of features) {
             let listItem = document.createElement('li');
             listItem.classList.add('feature');
-            if (item.suppressed) {
+            if (feature.suppressed) {
                 listItem.classList.add('suppressed');
             }
-            listItem.title = item.type;
+            listItem.title = feature.type;
 
-            listItem.setAttribute('data-id', item['id']);
-            listItem.setAttribute('data-name', item.name);
+            listItem.setAttribute('data-id', feature['id']);
+            listItem.setAttribute('data-name', feature.name);
 
-            if (item['component-name']) {
-                listItem.setAttribute('data-component-name', item['component-name']);
+            if (feature['component-name']) {
+                listItem.setAttribute('data-component-name', feature['component-name']);
             }
 
             let image = document.createElement('img');
-            image.src = item['image'];
+            image.src = feature['image'];
             image.classList.add('icon');
             image.addEventListener('click', onFeatureClick);
             listItem.appendChild(image);
 
             let name = document.createElement('span');
             name.classList.add('name');
-            name.innerText = item.name;
+            name.innerText = feature.name;
             name.contentEditable = true;
             name.addEventListener('keypress', onFeatureEdit);
             name.addEventListener('blur', onFeatureEditBlur);
             name.addEventListener('focus', onFeatureEditFocus);
             listItem.appendChild(name);
 
-            if (item.type == 'GROUP') {
-                appendItems(listItem, item.children);
+            if (feature.type == 'GROUP') {
+                appendItems(listItem, feature.children);
             }
             list.appendChild(listItem);
         }

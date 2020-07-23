@@ -23,18 +23,22 @@ OCCURRENCE_COPY_COMP = 1
 OCCURRENCE_SHEET_METAL = 2
 OCCURRENCE_BODIES_COMP = 3
 
+TIMELINE_STATUS_OK = 0
+TIMELINE_STATUS_PRODUCT_NOT_READY = 1
+TIMELINE_STATUS_NOT_PARAMETRIC = 2
+
 def get_timeline():
     product = app.activeProduct
     if product is None or product.classType() != 'adsk::fusion::Design':
         print("get_timeline: Product not ready")
-        return None
+        return (TIMELINE_STATUS_PRODUCT_NOT_READY, None)
     
     design = adsk.fusion.Design.cast(product)
 
     if design.designType == adsk.fusion.DesignTypes.ParametricDesignType:
-        return design.timeline
+        return (TIMELINE_STATUS_OK, design.timeline)
     else:
-        return None
+        return (TIMELINE_STATUS_NOT_PARAMETRIC, None)
 
 def get_occurrence_type(item):
     if item.name.startswith('CopyPaste '):
@@ -130,7 +134,7 @@ def find_commands_by_resource_folder(folder):
 # design.rootComponent.allOccurrences[0].component.sketches
 
 features_cache = []
-def invalidate(send=True, emptyTimeline=False):
+def invalidate(send=True, clear=False):
     global features_cache
 
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
@@ -138,18 +142,26 @@ def invalidate(send=True, emptyTimeline=False):
     if not palette:
         return
 
-    if emptyTimeline:
-        features = []
-    else:
-        timeline = get_timeline()
-        if timeline is not None:
+    message = ""
+    features = []
+    if not clear:
+        timeline_status, timeline = get_timeline()
+        if timeline_status == TIMELINE_STATUS_OK:
             features = get_features(timeline)
+        elif timeline_status == TIMELINE_STATUS_PRODUCT_NOT_READY:
+            pass
+        elif timeline_status == TIMELINE_STATUS_NOT_PARAMETRIC:
+            message = "Design is not parametric"
         else:
-            features = []
+            print("Unhandled timeline status:", timeline_status)
     features_cache = features
 
     action = 'setTimeline'
-    data = features
+    data = {
+         'features': features,
+         'message': message
+    }
+
     if not send:
         # Cannot do sendInfoToHTML inside the HTML event handler. We either have to use htmlArgs.returnData or
         # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
@@ -187,7 +199,7 @@ def get_features(timeline_container, id_base=''):
     return features
 
 def get_item_by_id_string(id_string):
-    item = get_timeline()
+    _, item = get_timeline()
     for i in id_string:
         item = item[int(i)]
     return item
@@ -444,7 +456,7 @@ def command_terminated_handler(args):
 def workspace_pre_deactivate_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
     if enabled:
-        invalidate(emptyTimeline=True)
+        invalidate(clear=True)
 
 def workspace_activated_handler(args):
     #eventArgs = adsk.core.WorkspaceEventArgs.cast(args)
