@@ -110,6 +110,7 @@
             image.src = feature['image'];
             image.classList.add('icon');
             image.addEventListener('click', onFeatureClick);
+            image.addEventListener('dblclick', onFeatureDoubleClick)
             listItem.appendChild(image);
 
             let name = document.createElement('span');
@@ -179,6 +180,13 @@
         let item = e.target.parentElement;
 
         let ret = query('selectFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
+        processCommands(ret);
+    }
+
+    function onFeatureDoubleClick(e) {
+        let item = e.target.parentElement;
+
+        let ret = query('editFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
         processCommands(ret);
     }
 

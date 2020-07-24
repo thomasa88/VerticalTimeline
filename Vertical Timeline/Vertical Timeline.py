@@ -77,98 +77,116 @@ def short_class(obj):
     return obj.classType().split('::')[-1]
 
 OCCURRENCE_RESOURCE_MAP = {
-    OCCURRENCE_GENERAL_COMP: 'Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent',
-    OCCURRENCE_COPY_COMP: 'Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance',
-    OCCURRENCE_SHEET_METAL: 'Neutron/UI/Base/Resources/Browser/ComponentSheetMetal',
-    OCCURRENCE_BODIES_COMP: 'Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody',
+    OCCURRENCE_GENERAL_COMP: ('Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent', ''),
+    OCCURRENCE_COPY_COMP: ('Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance', ''),
+    OCCURRENCE_SHEET_METAL: ('Neutron/UI/Base/Resources/Browser/ComponentSheetMetal', ''),
+    #'FusionCreateComponentFromBodyEditCommand' seems to actually create a new component
+    OCCURRENCE_BODIES_COMP: ('Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody', '')
 }
 
 PLANE_RESOURCE_MAP = {
-    'ConstructionPlaneOffsetDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_offset',
-    'ConstructionPlaneAtAngleDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_angle',
-    'ConstructionPlaneTangentDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_tangent',
-    'ConstructionPlaneMidplaneDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_midplane',
-    'ConstructionPlaneTwoEdgesDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_two_axis',
-    'ConstructionPlaneThreePointsDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_three_points',
-    'ConstructionPlaneTangentAtPointDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_point_face',
-    'ConstructionPlaneDistanceOnPathDefinition': 'Fusion/UI/FusionUI/Resources/construction/plane_onpath',
+    'ConstructionPlaneOffsetDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_offset', 'FusionDcEditWorkPlaneByPlaneOffsetCommand'),
+    'ConstructionPlaneAtAngleDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_angle', 'FusionDcEditWorkPlaneByLineAndAngleCommand'),
+    'ConstructionPlaneTangentDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_tangent', 'FusionDcEditWorkPlaneTangentToCylinderCommand'),
+    'ConstructionPlaneMidplaneDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_midplane', 'FusionDcEditWorkPlaneFromTwoPlanesCommand'),
+    'ConstructionPlaneTwoEdgesDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_two_axis', 'FusionDcEditWorkPlaneFromTwoLinesCommand'),
+    'ConstructionPlaneThreePointsDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_three_points', 'FusionDcEditWorkPlaneFromThreePointsCommand'),
+    'ConstructionPlaneTangentAtPointDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_point_face', 'FusionDcEditWorkPlaneTangentToFaceAtPointCommand'),
+    'ConstructionPlaneDistanceOnPathDefinition': ('Fusion/UI/FusionUI/Resources/construction/plane_onpath', 'FusionDcEditWorkPlaneAlongPathCommand'),
 }
 
 FEATURE_RESOURCE_MAP = {
     # This list is hand-crafted. Please respect the work put into this list and
     # retain the Copyright and License stanzas if you copy it.
     # Helpful tools: trace_feature_image function, ImageSorter, Process Monitor.
-    'Sketch': 'Fusion/UI/FusionUI/Resources/sketch/Sketch_feature',
-    'FormFeature': 'Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation',
-    'LoftFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/loft' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/loft',
-    'ExtrudeFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/extrude' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/extrude',
+    'Sketch': ('Fusion/UI/FusionUI/Resources/sketch/Sketch_feature', 'SketchActivate'),
+    'FormFeature': ('Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation', 'TSplineBaseFeatureActivate'),
+    'LoftFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/loft', 'FusionLoftEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/loft', 'FusionSurfaceLoftEditCommand'),
+    'ExtrudeFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/extrude', 'FusionExtrudeEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/extrude', 'FusionSurfaceExtrudeEditCommand'),
     'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[get_occurrence_type(i)],
-    'BoundaryFillFeature': 'Fusion/UI/FusionUI/Resources/surface/surface_sculpt',
-    'SurfaceDeleteFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/surface_delete',
-    'RevolveFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/revolve' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/revolve',
-    'SweepFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/sweep' if i.entity.isSolid else 'Fusion/UI/FusionUI/Resources/surface/sweep',
-    'RibFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/rib',
-    'WebFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/web',
-    'BoxFeature': lambda i: 'Fusion/UI/FusionUI/Resources/solid/primitive_box',
-    'CylinderFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_cylinder',
-    'SphereFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_sphere',
-    'TorusFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_torus',
-    'CoilFeature': 'Fusion/UI/FusionUI/Resources/solid/Coil',
-    'PipeFeature': 'Fusion/UI/FusionUI/Resources/solid/primitive_pipe',
-    'RectangularPatternFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_rectangular',
-    'CircularPatternFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_circular',
-    'PathPatternFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_path',
-    'MirrorFeature': 'Fusion/UI/FusionUI/Resources/pattern/pattern_mirror',
-    'ThickenFeature': 'Fusion/UI/FusionUI/Resources/surface/thicken',
-    'BaseFeature': 'Fusion/UI/FusionUI/Resources/Modeling/BaseFeature',
+    'BoundaryFillFeature': ('Fusion/UI/FusionUI/Resources/surface/surface_sculpt', 'FusionSculptEditCommand'),
+    'SurfaceDeleteFaceFeature': ('Fusion/UI/FusionUI/Resources/modify/surface_delete', 'FusionDcSurfaceDeleteFaceEditCommand'),
+    'RevolveFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/revolve', 'FusionRevolveEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/revolve', 'FusionSurfaceRevolveEditCommand'),
+    'SweepFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/sweep', 'FusionSweepEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/sweep', 'FusionSurfaceSweepEditCommand'),
+    'RibFeature': ('Fusion/UI/FusionUI/Resources/solid/rib', 'FusionDcRibEditCommand'),
+    'WebFeature': ('Fusion/UI/FusionUI/Resources/solid/web', 'FusionDcWebEditCommand'),
+    'BoxFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_box', 'BoxPrimitiveEditCommand'),
+    'CylinderFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_cylinder', 'CylinderPrimitiveEditCommand'),
+    'SphereFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_sphere', 'SpherePrimitiveEditCommand'),
+    'TorusFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_torus', 'TorusPrimitiveEditCommand'),
+    'CoilFeature': ('Fusion/UI/FusionUI/Resources/solid/Coil', 'CoilPrimitiveEditCommand'),
+    'PipeFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_pipe', 'PipePrimitiveEditCommand'),
+    'RectangularPatternFeature': ('Fusion/UI/FusionUI/Resources/pattern/pattern_rectangular', 'FusionDcRectangularPatternEditCommand'),
+    'CircularPatternFeature': ('Fusion/UI/FusionUI/Resources/pattern/pattern_circular', 'FusionDcCircularPatternEditCommand'),
+    'PathPatternFeature': ('Fusion/UI/FusionUI/Resources/pattern/pattern_path', 'FusionDcPathPatternEditCommand'),
+    'MirrorFeature': ('Fusion/UI/FusionUI/Resources/pattern/pattern_mirror', 'FusionDcMirrorPatternEditCommand'),
+    'ThickenFeature': ('Fusion/UI/FusionUI/Resources/surface/thicken', 'FusionDcSurfaceThickenEditCommand'),
+    'BaseFeature': ('Fusion/UI/FusionUI/Resources/Modeling/BaseFeature', 'BaseFeatureActivate'),
 
     # Solid Modify
-    'FilletFeature': 'Fusion/UI/FusionUI/Resources/Modeling/FilletEdges',
-    'ChamferFeature': 'Fusion/UI/FusionUI/Resources/Modeling/Chamfer',
-    'ShellFeature': 'Fusion/UI/FusionUI/Resources/Modeling/ShellBody',
-    'DraftFeature': 'Fusion/UI/FusionUI/Resources/solid/draft',
-    'ScaleFeature': 'Fusion/UI/FusionUI/Resources/modify/scale',
-    'CombineFeature': 'Fusion/UI/FusionUI/Resources/modify/combine',
-    'ReplaceFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/replace_face',
-    'SplitFaceFeature': 'Fusion/UI/FusionUI/Resources/modify/split_face',
-    'SplitBodyFeature': 'Fusion/UI/FusionUI/Resources/modify/split',
+    'FilletFeature': ('Fusion/UI/FusionUI/Resources/Modeling/FilletEdges', 'FusionDcFilletEditCommand'),
+    'ChamferFeature': ('Fusion/UI/FusionUI/Resources/Modeling/Chamfer', 'FusionDcChamferEditCommand'),
+    'ShellFeature': ('Fusion/UI/FusionUI/Resources/Modeling/ShellBody', 'FusionDcShellFeatureEditCommand'),
+    'DraftFeature': ('Fusion/UI/FusionUI/Resources/solid/draft', 'FusionDcDraftEditCommand'),
+    'ScaleFeature': ('Fusion/UI/FusionUI/Resources/modify/scale', 'FusionDcScaleEditCommand'),
+    'CombineFeature': ('Fusion/UI/FusionUI/Resources/modify/combine', 'FusionCombineEditCommand'),
+    'ReplaceFaceFeature': ('Fusion/UI/FusionUI/Resources/modify/replace_face', 'FusionDcReplaceFaceEditCommand'),
+    'SplitFaceFeature': ('Fusion/UI/FusionUI/Resources/modify/split_face', 'FusionDcSplitFaceEditCommand'),
+    'SplitBodyFeature': ('Fusion/UI/FusionUI/Resources/modify/split', 'FusionDcSplitBodyEditCommand'),
 
     # Surface Create only
-    'OffsetFacesFeature': 'Fusion/UI/FusionUI/Resources/Modeling/OffsetFaces',
-    'PatchFeature': 'Fusion/UI/FusionUI/Resources/surface/patch',
-    'RuledSurfaceFeature': 'Fusion/UI/FusionUI/Resources/surface/ruled',
-    'OffsetFeature': 'Fusion/UI/FusionUI/Resources/surface/offset',
+    'OffsetFacesFeature': ('Fusion/UI/FusionUI/Resources/Modeling/OffsetFaces', 'FusionOffsetFacesEditCommand'),
+    'PatchFeature': ('Fusion/UI/FusionUI/Resources/surface/patch', 'FusionSurfacePatchEditCommand'),
+    'RuledSurfaceFeature': ('Fusion/UI/FusionUI/Resources/surface/ruled', 'FusionDcSurfaceRuledEditCommand'),
+    'OffsetFeature': ('Fusion/UI/FusionUI/Resources/surface/offset', 'FusionDcSurfaceOffsetEditCommand'),
 
     # Surface Modify only
-    'TrimFeature': 'Fusion/UI/FusionUI/Resources/surface/trim',
-    'ExtendFeature': 'Fusion/UI/FusionUI/Resources/surface/extend',
-    'StitchFeature': 'Fusion/UI/FusionUI/Resources/surface/stitch',
-    'UnstitchFeature': 'Fusion/UI/FusionUI/Resources/surface/unstitch',
-    'ReverseNormalFeature': 'Fusion/UI/FusionUI/Resources/modify/surface_reverse_normal',
+    'TrimFeature': ('Fusion/UI/FusionUI/Resources/surface/trim', 'FusionDcSurfaceTrimEditCommand'),
+    'ExtendFeature': ('Fusion/UI/FusionUI/Resources/surface/extend', 'FusionDcSurfaceExtendEditCommand'),
+    'StitchFeature': ('Fusion/UI/FusionUI/Resources/surface/stitch', 'FusionSurfaceStitchEditCommand'),
+    'UnstitchFeature': ('Fusion/UI/FusionUI/Resources/surface/unstitch', 'FusionSurfaceUnStitchEditCommand'),
+    'ReverseNormalFeature': ('Fusion/UI/FusionUI/Resources/modify/surface_reverse_normal', 'FusionDcReverseNormalEdit'),
 
     # Assembly
-    'Joint': 'Fusion/UI/FusionUI/Resources/Assembly/joint',
-    'AsBuiltJoint': 'Fusion/UI/FusionUI/Resources/Assembly/JointAsBuilt',
-    'JointOrigin': 'Fusion/UI/FusionUI/Resources/construction/jointorigin',
-    'RigidGroup': 'Fusion/UI/FusionUI/Resources/Assembly/RigidGroup',
-    'Snapshot': 'Fusion/UI/FusionUI/Resources/Assembly/Snapshot',
+    'Joint': ('Fusion/UI/FusionUI/Resources/Assembly/joint', 'DcEditJointAssembleCmd'),
+    'AsBuiltJoint': ('Fusion/UI/FusionUI/Resources/Assembly/JointAsBuilt', 'DcEditJointAsBuiltCmd'),
+    'JointOrigin': ('Fusion/UI/FusionUI/Resources/construction/jointorigin', 'EditJointOriginR2Cmd'),
+    'RigidGroup': ('Fusion/UI/FusionUI/Resources/Assembly/RigidGroup', 'DcEditRigidGroupCmd'),
+    'Snapshot': ('Fusion/UI/FusionUI/Resources/Assembly/Snapshot', 'SnapshotActivate'),
 
     # Planes
     'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(short_class(i.entity.definition)),
+    
+    # Move: FusionDcMoveCopyEditCommand
+    # Align: FusionDcAlignEditCommand
 }
 
-def get_feature_image(item):
-    entity = item.entity
+def get_feature_image(obj):
+    match = get_feature_res(obj)
+
+    if not match or not match[0]:
+        # Image not mapped
+        image = 'Fusion/UI/FusionUI/Resources/finish/finishX'
+    else:
+        image = match[0]
+    
+    return get_image_path(image)
+
+def get_feature_edit_command_id(obj):
+    match = get_feature_res(obj)
+
+    if not match or not match[1]:
+        return None
+    else:
+        return match[1]
+
+def get_feature_res(obj):
+    entity = obj.entity
     fusionType = short_class(entity)
     match = FEATURE_RESOURCE_MAP.get(fusionType)
     if callable(match):
-        match = match(item)
-
-    if not match:
-        # Image not mapped
-        match = 'Fusion/UI/FusionUI/Resources/finish/finishX'
-    
-    return get_image_path(match)
+        match = match(obj)
+    return match
 
 def get_image_path(subpath):
     path = f'{get_product_deploy_folder()}/{subpath}/16x16.png'
@@ -417,6 +435,13 @@ def run(context):
                     adsk.core.ApplicationCommandEventHandler,
                     command_terminated_handler)
 
+        # def f(args):
+        #     print(args.commandId)
+        #     args.isCanceled = True
+        # add_handler(ui.commandStarting,
+        #             adsk.core.ApplicationCommandEventHandler,
+        #             f)
+
         # Fusion bug: Activated is not called when switching to/from Drawing.
         # https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
         add_handler(app.documentActivated,
@@ -562,27 +587,36 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                     else:
                         item.name = data['value']
                 html_commands.append(ret)
-            elif action == 'selectFeature':
+            elif action == 'selectFeature' or action == 'editFeature':
                 node = timeline_cache_map[data['id']]
-                item = node.obj
+                obj = node.obj
                 ret = True
 
-                if item.isSuppressed:
+                if obj.isSuppressed:
                     ui.messageBox('Cannot select suppressed features')
                     ret = False
-                elif item.isRolledBack:
+                elif obj.isRolledBack:
                     ui.messageBox('Cannot select rolled back features')
                     ret = False
                 else:
                     # Making this in a transactory way so the current selection is not removed
                     # if the entity is not selectable.
                     newSelection = adsk.core.ObjectCollection.create()
-                    newSelection.add(item.entity)
+                    newSelection.add(obj.entity)
                     try:
                         ui.activeSelections.all = newSelection
                     except Exception as e:
                         ui.messageBox(f'Failed to select this entity: {e}')
                         ret = False
+                    
+                    if ret and action == 'editFeature':
+                        command_id = get_feature_edit_command_id(obj)
+                        if command_id:
+                            #print("T", ui.terminateActiveCommand())
+                            ui.commandDefinitions.itemById(command_id).execute()
+                        else:
+                            ui.messageBox(f'Editing this feature is not supported')
+                            ret = False
                 html_commands.append(ret)
             if html_commands:
                 htmlArgs.returnData = json.dumps(html_commands)
