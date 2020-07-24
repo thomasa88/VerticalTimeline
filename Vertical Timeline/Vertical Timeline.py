@@ -6,6 +6,7 @@
 
 import adsk.core, adsk.fusion, adsk.cam, traceback
 
+from collections import defaultdict
 import json
 import os
 
@@ -203,10 +204,7 @@ def find_commands_by_resource_folder(folder):
 # ui.commandDefinitions.itemById('').resourceFolder
 # design.rootComponent.allOccurrences[0].component.sketches
 
-features_cache = []
 def invalidate(send=True, clear=False):
-    global features_cache
-
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
 
     if not palette:
@@ -224,7 +222,6 @@ def invalidate(send=True, clear=False):
             message = "Design is not parametric"
         else:
             print("Unhandled timeline status:", timeline_status)
-    features_cache = features
 
     action = 'setTimeline'
     data = {
@@ -240,23 +237,46 @@ def invalidate(send=True, clear=False):
     else:
         palette.sendInfoToHTML('setTimeline', json.dumps(data))
 
-def get_features(timeline_container, id_base=''):
+class TimelineObjectNode:
+    def __init__(self, obj, id):
+        self.obj = obj
+        self.id = id
+        self.children = []
+
+timeline_cache_tree = None
+timeline_cache_map = None
+def get_features(timeline):
+    global timeline_cache_tree, timeline_cache_map
+    flat_timeline = get_flat_timeline(timeline)
+    timeline_cache_tree, timeline_cache_map = build_timeline_tree(flat_timeline)
+
+    return get_features_from_node(timeline_cache_tree)
+
+def get_features_from_node(timeline_tree_node):
     features = []
-    for i, item in enumerate(timeline_container):
+    for i, child_node in enumerate(timeline_tree_node.children):
+        obj = child_node.obj
+
         feature = {
-            'id': f'{id_base}{i}',
-            'name': item.name,
-            'suppressed': item.isSuppressed or item.isRolledBack,
+            'id': str(child_node.id),
+            'name': obj.name,
+            'suppressed': obj.isSuppressed or obj.isRolledBack,
             }
-        if not item.isGroup:
+
+        # Might there be empty groups?
+        if child_node.children:
+            feature['type'] = 'GROUP'
+            feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Timeline/GroupFeature')
+            feature['children'] = get_features_from_node(child_node)
+        else:
             try:
-                entity = item.entity
+                entity = obj.entity
             except RuntimeError as e:
                 entity = None
             
             if entity:
-                feature['type'] = short_class(item.entity)
-                feature['image'] = get_feature_image(item)
+                feature['type'] = short_class(obj.entity)
+                feature['image'] = get_feature_image(obj)
             else:
                 # Move and Align does not allow us to access their entity attribute
                 # Assuming Move type.
@@ -267,22 +287,75 @@ def get_features(timeline_container, id_base=''):
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
                 # Strip the whitespace to make the list cleaner.
                 feature['name'] = feature['name'].lstrip()
-                if get_occurrence_type(item) != OCCURRENCE_BODIES_COMP:
+                if get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
                     # Name is a read-only instance variant of the component's name
                     # Let the user modify the component's name instead
-                    feature['component-name'] = item.entity.component.name
-        else:
-            feature['type'] = 'GROUP'
-            feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Timeline/GroupFeature')
-            feature['children'] = get_features(item, feature['id'] + '-')
+                    feature['component-name'] = obj.entity.component.name
+
         features.append(feature)
+
     return features
 
-def get_item_by_id_string(id_string):
-    _, item = get_timeline()
-    for i in id_string:
-        item = item[int(i)]
-    return item
+def build_timeline_tree(flat_timeline):
+    # The timeline tree returned from Fusion depends on the view state of
+    # the GUI timeline control. Objects are grouped/nested only if a group
+    # is collapsed in the GUI. Flatten the timeline to always get the same
+    # result.
+
+    next_id = 0
+    def next_node_id():
+        nonlocal next_id
+        node_id = next_id
+        next_id += 1
+        return node_id
+
+    def new_node(obj):
+        node_id = next_node_id()
+        node = TimelineObjectNode(obj, node_id)
+        id_map[node_id] = node
+        return node
+
+    id_map = {}
+    top_node = new_node(None)
+    in_node = top_node
+    group_nodes = [top_node]
+
+    def get_group_node(group_obj):
+        for group_node in group_nodes:
+            if group_node.obj == group_obj:
+                return group_node
+        group_node = new_node(group_obj)
+        group_nodes.append(group_node)
+        parent_node = get_group_node(group_obj.parentGroup)
+        parent_node.children.append(group_node)
+        return group_node
+    
+    for obj in flat_timeline:
+        node = new_node(obj)
+        parent_obj = obj.parentGroup
+        if parent_obj != in_node.obj:
+            in_node = get_group_node(parent_obj)
+        in_node.children.append(node)
+
+    return top_node, id_map
+
+def get_flat_timeline(timeline_collection):
+    '''A flat timeline representation, with all objects except any group objects.'''
+    flat_collection = []
+    
+    for i, obj in enumerate(timeline_collection):
+        if obj.isGroup:
+            # Groups only appear in the timeline if they are collapsed
+            # In that case, the features inside the group are only listed within the group
+            # and not as part of the top-level timeline. So timeline essentially gives us
+            # what is literally shown in the timeline control in Fusion.
+
+            # Flatten the group
+            flat_collection += get_flat_timeline(obj)
+        else:
+            flat_collection.append(obj)
+
+    return flat_collection
 
 def error_catcher_wrapper(func):
     def catcher(self, args):
@@ -469,7 +542,8 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                 # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
                 html_commands.append(invalidate(send=False))
             elif action == 'setFeatureName':
-                item = get_item_by_id_string(data['id'].split('-'))
+                node = timeline_cache_map[data['id']]
+                item = node.obj
                 ret = True
                 if data['value'] == '':
                     ret = False
@@ -489,8 +563,9 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                         item.name = data['value']
                 html_commands.append(ret)
             elif action == 'selectFeature':
+                node = timeline_cache_map[data['id']]
+                item = node.obj
                 ret = True
-                item = get_item_by_id_string(data['id'].split('-'))
 
                 if item.isSuppressed:
                     ui.messageBox('Cannot select suppressed features')

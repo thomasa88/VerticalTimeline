@@ -17,7 +17,6 @@
                 overflow: hidden;
                 white-space: nowrap;
                 text-overflow: ellipsis;
-                height: 20px;
             }
             .suppressed {
                 opacity: 0.5;
@@ -179,7 +178,7 @@
     function onFeatureClick(e) {
         let item = e.target.parentElement;
 
-        let ret = query('selectFeature', { 'id': item.getAttribute('data-id') } );
+        let ret = query('selectFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
         processCommands(ret);
     }
 
@@ -198,7 +197,8 @@
             }
         }
 
-        ret = query('setFeatureName', { 'id': item.getAttribute('data-id'), 'value': value });
+        ret = query('setFeatureName', { 'id': parseInt(item.getAttribute('data-id')),
+                                        'value': value });
         ok = ret[0]
         if (ok) {
             item.setAttribute('data-name', value);
