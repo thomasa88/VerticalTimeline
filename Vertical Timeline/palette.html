@@ -31,17 +31,33 @@
                 /* Border compensation */
                 padding-left: 4px;
                 padding-right: 4px;
-                padding-top: -1;
+            }
+            .feature-group-header.collapsed {
+                border-bottom: 1px solid black;
             }
             .feature-group {
                 border: 1px solid black;
                 border-top: none;
-                /* Border compensation */
-                padding: -1px;
-                padding-top: 0px;
             }
-            .suppressed {
-                opacity: 0.5;
+            .feature-group.collapsed {
+                display: none;
+            }
+            .group-toggle {
+                display: inline-block;
+                height: 16px;
+                width: 12px;
+            }
+            .group-toggle::before {
+                content: "－";
+            }
+            .group-toggle.collapsed::before {
+                content: "＋";
+            }
+            .parents-container, .group-toggle {
+                min-width: 12px;
+            }
+            .parents-container {
+                display: inline-block;
             }
             .parent-bar {
                 display: inline-block;
@@ -49,9 +65,6 @@
                 height: 16px;
                 vertical-align: middle;
                 margin-right: 2px;
-            }
-            .parents-container {
-                display: inline-block;
             }
             .icon {
                 width: 16px;
@@ -70,6 +83,9 @@
             }
             .name:focus {
                 background-color: white;
+            }
+            .suppressed {
+                opacity: 0.5;
             }
             ul {
                 padding-left: 0px;
@@ -101,6 +117,8 @@
     ];
     var colorMap = {};
     var nextColor = 0;
+
+    var collapsedGroups = new Set();
 
     var cancelingEdit = false;
 
@@ -157,7 +175,15 @@
                 listItem.setAttribute('data-component-name', feature['component-name']);
             }
 
-            addParentBars(listItem, feature, maxParents);
+            let groupToggle;
+            if (feature.type == 'GROUP') {
+                groupToggle = document.createElement('span');
+                groupToggle.classList.add('group-toggle');
+                //groupToggle.style.width = maxParents * (3 + 2) + 'px';
+                listItem.appendChild(groupToggle);
+            } else {
+                addParentBars(listItem, feature, maxParents);
+            }
 
             let image = document.createElement('img');
             image.src = feature['image'];
@@ -177,10 +203,28 @@
             if (feature.type == 'GROUP') {
                 listItem.classList.add('feature-group-header');
                 listItem.title = 'Group';
-                appendItems(list, feature.children, maxParents, true);
+
+                groupList = appendItems(list, feature.children, maxParents, true);
+                groupToggle.addEventListener('click', () => {
+                    let collapse = !collapsedGroups.has(feature.name);
+                    if (collapse) {
+                        collapsedGroups.add(feature.name);
+                    } else {
+                        collapsedGroups.delete(feature.name);
+                    }
+                    listItem.classList.toggle('collapsed', collapse);
+                    groupToggle.classList.toggle('collapsed', collapse);
+                    groupList.classList.toggle('collapsed', collapse);
+                });
+                if (collapsedGroups.has(feature.name)) {
+                    listItem.classList.add('collapsed');
+                    groupToggle.classList.add('collapsed');
+                    groupList.classList.add('collapsed');
+                }
             }
         }
-        parent.appendChild(list)
+        parent.appendChild(list);
+        return list;
     }
 
     function addParentBars(item, feature, maxParents) {
