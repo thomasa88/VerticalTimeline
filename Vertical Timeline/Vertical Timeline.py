@@ -9,6 +9,7 @@ import adsk.core, adsk.fusion, adsk.cam, traceback
 from collections import defaultdict
 import json
 import os
+import threading
 
 # global set of event handlers to keep them referenced for the duration of the command
 handlers = []
@@ -16,6 +17,13 @@ handlers = []
 ui = None
 app = None
 onCommandTerminated = None
+
+html_ready = False
+
+watcher_thread = None
+watcher_event = None
+watcher_stop_flag = None
+timeline_item_count = 0
 
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'settings.json')
 
@@ -223,9 +231,12 @@ def find_commands_by_resource_folder(folder):
 # design.rootComponent.allOccurrences[0].component.sketches
 
 def invalidate(send=True, clear=False):
+    global timeline_item_count
+    global html_ready
+
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
 
-    if not palette:
+    if not palette or not html_ready:
         return
 
     message = ""
@@ -233,10 +244,12 @@ def invalidate(send=True, clear=False):
     if not clear:
         timeline_status, timeline = get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
+            timeline_item_count = timeline.count
             features = get_features(timeline)
         elif timeline_status == TIMELINE_STATUS_PRODUCT_NOT_READY:
-            pass
+            timeline_item_count = -1
         elif timeline_status == TIMELINE_STATUS_NOT_PARAMETRIC:
+            timeline_item_count = -1
             message = "Design is not parametric"
         else:
             print("Unhandled timeline status:", timeline_status)
@@ -401,6 +414,42 @@ def get_view_drop_down():
     view_drop_down = file_drop_down.controls.itemById('ViewWidgetCommand')
     return view_drop_down
 
+def start_watcher():
+    global watcher_stop_flag
+    global watcher_event # Avoid garbage collection
+    global watcher_thread
+    watcher_stop_flag = threading.Event()
+    watcher_event = app.registerCustomEvent('thomasa88_timelineWatch')
+    add_handler(watcher_event,
+                adsk.core.CustomEventHandler,
+                lambda args: check_timeline())
+    watcher_thread = threading.Thread(target=watcher_runner)
+    watcher_thread.start()
+
+def stop_watcher():
+    watcher_stop_flag.set()
+    app.unregisterCustomEvent('thomasa88_timelineWatch')
+
+    # GUI will be frozen during wait
+    watcher_thread.join(timeout=3)
+    if watcher_thread.is_alive():
+        ui.messageBox('Vertical Timeline watcher did not stop!')
+
+def watcher_runner():
+    global watcher_stop_flag
+    while not watcher_stop_flag.wait(1):
+        app.fireCustomEvent('thomasa88_timelineWatch')
+
+def check_timeline():
+    global timeline_item_count
+    global html_ready
+    timeline_status, timeline = get_timeline()
+    if timeline_status == TIMELINE_STATUS_OK:
+        if timeline.count != timeline_item_count:
+            invalidate()
+    else:
+        timeline_item_count = -1
+
 def run(context):
     global ui, app, handlers
     debug = False
@@ -454,7 +503,9 @@ def run(context):
 
         add_handler(ui.workspaceActivated,
                     adsk.core.WorkspaceEventHandler,
-                    workspace_activated_handler)
+                    workspace_activated_handler)                
+
+        start_watcher()
 
         print("Running")
 
@@ -468,6 +519,8 @@ def run(context):
 def stop(context):
     try:
         print('Stopping')
+
+        stop_watcher()
 
         for handler, event in handlers:
             event.remove(handler)
@@ -510,8 +563,12 @@ class TogglePaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
             ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
 
 def show_palette():
+    global html_ready
+
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
     if not palette:
+        html_ready = False
+
         palette = ui.palettes.add('thomasa88_verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
                                     True, True, True, 250, 500, False)
         palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
@@ -555,6 +612,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
     def __init__(self):
         super().__init__()
     def notify(self, args):
+        global html_ready
         try:
             htmlArgs = adsk.core.HTMLEventArgs.cast(args)
             action = htmlArgs.action
@@ -562,6 +620,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
             html_commands = []
             if action == 'ready':
                 print('HTML ready')
+                html_ready = True
 
                 # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
                 # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
