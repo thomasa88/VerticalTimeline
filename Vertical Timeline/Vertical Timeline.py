@@ -734,7 +734,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                             #print("T", ui.terminateActiveCommand())
                             ui.commandDefinitions.itemById(command_id).execute()
                         else:
-                            ui.messageBox(f'Editing this feature is not supported')
+                            ui.messageBox(f'Editing {short_class(obj.entity)} feature is not supported')
                             ret = False
                 html_commands.append(ret)
             if html_commands:
