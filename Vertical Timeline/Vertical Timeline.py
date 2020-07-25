@@ -245,7 +245,7 @@ def invalidate(send=True, clear=False):
         timeline_status, timeline = get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
             timeline_item_count = timeline.count
-            features = get_features(timeline)
+            features, max_parents = get_features(timeline)
         elif timeline_status == TIMELINE_STATUS_PRODUCT_NOT_READY:
             timeline_item_count = -1
         elif timeline_status == TIMELINE_STATUS_NOT_PARAMETRIC:
@@ -257,7 +257,8 @@ def invalidate(send=True, clear=False):
     action = 'setTimeline'
     data = {
          'features': features,
-         'message': message
+         'max-parents': max_parents,
+         'message': message,
     }
 
     if not send:
@@ -281,10 +282,13 @@ def get_features(timeline):
     flat_timeline = get_flat_timeline(timeline)
     timeline_cache_tree, timeline_cache_map = build_timeline_tree(flat_timeline)
 
-    return get_features_from_node(timeline_cache_tree)
+    component_parent_map = get_component_parent_map()
 
-def get_features_from_node(timeline_tree_node):
+    return get_features_from_node(timeline_cache_tree, component_parent_map)
+
+def get_features_from_node(timeline_tree_node, component_parent_map):
     features = []
+    max_parents = 0
     for i, child_node in enumerate(timeline_tree_node.children):
         obj = child_node.obj
 
@@ -296,10 +300,15 @@ def get_features_from_node(timeline_tree_node):
 
         # Might there be empty groups?
         if child_node.children:
+            # Group
             feature['type'] = 'GROUP'
             feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Timeline/GroupFeature')
-            feature['children'] = get_features_from_node(child_node)
+            feature['children'], group_max_parents = get_features_from_node(child_node,
+                                                                            component_parent_map)
+            if group_max_parents > max_parents:
+                max_parents = group_max_parents
         else:
+            # Not group
             try:
                 entity = obj.entity
             except RuntimeError as e:
@@ -308,8 +317,14 @@ def get_features_from_node(timeline_tree_node):
             if entity:
                 feature['type'] = short_class(obj.entity)
                 feature['image'] = get_feature_image(obj)
+                parents = get_feature_parent_path(component_parent_map,
+                                                  obj.entity)
+                feature['parent-components'] = parents
+                if len(parents) > max_parents:
+                    max_parents = len(parents)
             else:
                 # Move and Align does not allow us to access their entity attribute
+                # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921
                 # Assuming Move type.
                 feature['type'] = 'Move'
                 feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Assembly/Move')
@@ -325,7 +340,35 @@ def get_features_from_node(timeline_tree_node):
 
         features.append(feature)
 
-    return features
+    return (features, max_parents)
+
+def get_feature_parent_path(component_parent_map, feature):
+    design = app.activeProduct
+
+    if feature.classType() == 'adsk::fusion::Occurrence':
+        parent_name = component_parent_map[feature.component.name]
+    elif feature.classType() == 'adsk::fusion::ConstructionPlane':
+        if feature.parent.classType() == 'adsk::fusion::Component':
+            parent_name = feature.parent.name
+        else:
+            return []
+    elif not hasattr(feature, 'parentComponent'):
+        ui.messageBox("Vertical Timeline: Unhandled missing parent for " + feature.classType())
+        return []
+    elif feature.parentComponent == design.rootComponent:
+        return []
+    else:
+        parent_name = feature.parentComponent.name
+
+    path = []
+    while parent_name:
+        path.append(parent_name)
+        parent_name = component_parent_map[parent_name]
+    
+    path.reverse()
+    return path
+    
+    
 
 def build_timeline_tree(flat_timeline):
     # The timeline tree returned from Fusion depends on the view state of
@@ -387,6 +430,23 @@ def get_flat_timeline(timeline_collection):
             flat_collection.append(obj)
 
     return flat_collection
+
+def get_component_parent_map():
+    design = app.activeProduct
+    component_parent_map = {}
+    parent_map_occurrence(component_parent_map,
+     None,
+     design.rootComponent.occurrences)
+
+    return component_parent_map
+
+def parent_map_occurrence(component_parent_map, parent_name, occurrences):
+    for occurrence in occurrences:
+        name = occurrence.component.name
+        component_parent_map[name] = parent_name
+        parent_map_occurrence(component_parent_map,
+         name,
+         occurrence.childOccurrences)
 
 def error_catcher_wrapper(func):
     def catcher(self, args):

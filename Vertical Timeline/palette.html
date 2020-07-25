@@ -21,6 +21,16 @@
             .suppressed {
                 opacity: 0.5;
             }
+            .parent-bar {
+                display: inline-block;
+                width: 3px;
+                height: 16px;
+                vertical-align: middle;
+                margin-right: 2px;
+            }
+            .parents-container {
+                display: inline-block;
+            }
             .icon {
                 width: 16px;
                 height: 16px;
@@ -60,6 +70,16 @@
         </div>
     </body>
     <script>
+    // Can't access the colors from Fusion, so making up our own
+    const COMPONENT_COLORS = [
+        '#e79f53',
+        '#4a51d7',
+        '#6bfcdd',
+        '#54d8f7',
+    ];
+    var colorMap = {};
+    var nextColor = 0;
+
     var cancelingEdit = false;
 
     window.fusionJavaScriptHandler = {handle: function(action, jsonData){
@@ -77,7 +97,7 @@
 
                     let timeline = document.getElementById('timeline');
                     timeline.innerHTML = '';
-                    appendItems(timeline, data['features'])
+                    appendItems(timeline, data['features'], data['max-parents'])
 
                     break;
                 case 'debugger':
@@ -92,7 +112,7 @@
         return 'OK';
     }
 
-    function appendItems(parent, features) {
+    function appendItems(parent, features, maxParents) {
         let list = document.createElement('ul');
         for (const feature of features) {
             let listItem = document.createElement('li');
@@ -108,6 +128,8 @@
             if (feature['component-name']) {
                 listItem.setAttribute('data-component-name', feature['component-name']);
             }
+
+            addParentBars(listItem, feature, maxParents);
 
             let image = document.createElement('img');
             image.src = feature['image'];
@@ -126,11 +148,41 @@
             listItem.appendChild(name);
 
             if (feature.type == 'GROUP') {
-                appendItems(listItem, feature.children);
+                appendItems(listItem, feature.children, maxParents);
             }
             list.appendChild(listItem);
         }
         parent.appendChild(list)
+    }
+
+    function addParentBars(item, feature, maxParents) {
+        let parentBars = document.createElement('span');
+        parentBars.classList.add('parents-container');
+        parentBars.style.width = maxParents * (3 + 2) + 'px';
+        item.appendChild(parentBars);
+
+        let parents = feature['parent-components'];
+        if (!parents) {
+            return;
+        }
+
+        for (const parent of parents) {
+            let parentBar = document.createElement('span');
+            parentBar.classList.add('parent-bar')
+            parentBar.title = parent;
+            color = colorMap[parent];
+            if (!color) {
+                if (nextColor >= COMPONENT_COLORS.length) {
+                    color = 'silver';
+                } else {
+                    color = COMPONENT_COLORS[nextColor];
+                    colorMap[parent] = color;
+                    nextColor++;
+                }
+            }
+            parentBar.style.backgroundColor = color;
+            parentBars.appendChild(parentBar);
+        }
     }
 
     function onFeatureEdit(e) {
