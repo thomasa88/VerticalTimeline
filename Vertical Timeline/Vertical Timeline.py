@@ -28,10 +28,11 @@ timeline_item_count = 0
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'settings.json')
 
 # Occurrence types
-OCCURRENCE_GENERAL_COMP = 0
-OCCURRENCE_COPY_COMP = 1
-OCCURRENCE_SHEET_METAL = 2
-OCCURRENCE_BODIES_COMP = 3
+OCCURRENCE_UNKNOWN_COMP = 0
+OCCURRENCE_NEW_COMP = 1
+OCCURRENCE_COPY_COMP = 2
+OCCURRENCE_SHEET_METAL = 3
+OCCURRENCE_BODIES_COMP = 4
 
 TIMELINE_STATUS_OK = 0
 TIMELINE_STATUS_PRODUCT_NOT_READY = 1
@@ -70,26 +71,47 @@ def get_timeline():
     else:
         return (TIMELINE_STATUS_NOT_PARAMETRIC, None)
 
-def get_occurrence_type(item):
-    if item.name.startswith('CopyPaste '):
+def get_occurrence_type(obj):
+    # Heuristics to determine component creation feature
+    
+    # When prefixed with a "type prefix", we can be sure of the occurence type
+    # In this case, the name of the timeline object cannot be edited
+    # This, of course, assumes that the user does not create a component starting
+    # with such a string.
+    split_name = obj.name.split(' ', maxsplit=1)
+    # User can have input spaces, so a length of split_name > 1 does not automatically
+    # mean that we have a type prefix. So let's try.
+    # TODO: We can probably compare with the component name to find out if this is
+    #       indeed a prefix.
+    potential_type_prefix = split_name[0]
+    if potential_type_prefix == '':
+        return OCCURRENCE_NEW_COMP
+        # I have not found ant way to determine if a component is a sheet metal component.
+        # Solid features are allowed in sheet metal components and sheet metal features are
+        # allowed in "normal" components, so cannot use the content as a differentiator.
+        #return OCCURRENCE_SHEET_METAL
+    if potential_type_prefix == 'CopyPaste':
         return OCCURRENCE_COPY_COMP
-    elif hasattr(item.entity, 'bRepBodies'):
-        if item.entity.bRepBodies.count == 0:
-            return OCCURRENCE_SHEET_METAL
-        else:
-            return OCCURRENCE_BODIES_COMP
-    else:
-        return OCCURRENCE_GENERAL_COMP
+
+    if hasattr(obj.entity, 'bRepBodies'):
+        return OCCURRENCE_BODIES_COMP
+
+    return OCCURRENCE_UNKNOWN_COMP
+
+        # if obj.entity.bRepBodies.count == 0:
+        #     return OCCURRENCE_SHEET_METAL
+        # else:
 
 def short_class(obj):
     return obj.classType().split('::')[-1]
 
 OCCURRENCE_RESOURCE_MAP = {
-    OCCURRENCE_GENERAL_COMP: ('Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent', ''),
+    OCCURRENCE_NEW_COMP: ('Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent', ''),
     OCCURRENCE_COPY_COMP: ('Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance', ''),
     OCCURRENCE_SHEET_METAL: ('Neutron/UI/Base/Resources/Browser/ComponentSheetMetal', ''),
     #'FusionCreateComponentFromBodyEditCommand' seems to actually create a new component
-    OCCURRENCE_BODIES_COMP: ('Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody', '')
+    OCCURRENCE_BODIES_COMP: ('Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody', ''),
+    OCCURRENCE_UNKNOWN_COMP: ('Fusion/UI/FusionUI/Resources/finish/finishX', '')
 }
 
 PLANE_RESOURCE_MAP = {
@@ -118,6 +140,7 @@ FEATURE_RESOURCE_MAP = {
     'SweepFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/sweep', 'FusionSweepEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/sweep', 'FusionSurfaceSweepEditCommand'),
     'RibFeature': ('Fusion/UI/FusionUI/Resources/solid/rib', 'FusionDcRibEditCommand'),
     'WebFeature': ('Fusion/UI/FusionUI/Resources/solid/web', 'FusionDcWebEditCommand'),
+    'Thomasa88Feature': ('Vertical/Timeline', 'FeatureMap'),
     'BoxFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_box', 'BoxPrimitiveEditCommand'),
     'CylinderFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_cylinder', 'CylinderPrimitiveEditCommand'),
     'SphereFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_sphere', 'SpherePrimitiveEditCommand'),
@@ -335,7 +358,8 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 # Strip the whitespace to make the list cleaner.
                 feature['name'] = feature['name'].lstrip()
                 if get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
-                    # Name is a read-only instance variant of the component's name
+                    # Name is a read-only instance variant of the component's name,
+                    # with a prefix on it.
                     # Let the user modify the component's name instead
                     feature['component-name'] = obj.entity.component.name
 
