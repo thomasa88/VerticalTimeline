@@ -1,6 +1,8 @@
 #Author-Thomas Axelsson
 #Description-Provides a vertical timeline.
 
+# Put add-in folder in %appdata%\Autodesk\Autodesk Fusion 360\API\AddIns
+
 # Need to use Visual Studio Code Python extension version 2019.9.34911
 # to be able to debug with Fusion.. (2020-07-23)
 
@@ -129,6 +131,7 @@ FEATURE_RESOURCE_MAP = {
     # This list is hand-crafted. Please respect the work put into this list and
     # retain the Copyright and License stanzas if you copy it.
     # Helpful tools: trace_feature_image function, ImageSorter, Process Monitor.
+    # Resources are found in %localappdata%\Autodesk\webdeploy\production\*\
     'Sketch': ('Fusion/UI/FusionUI/Resources/sketch/Sketch_feature', 'SketchActivate'),
     'FormFeature': ('Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation', 'TSplineBaseFeatureActivate'),
     'LoftFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/loft', 'FusionLoftEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/loft', 'FusionSurfaceLoftEditCommand'),
@@ -153,6 +156,9 @@ FEATURE_RESOURCE_MAP = {
     'MirrorFeature': ('Fusion/UI/FusionUI/Resources/pattern/pattern_mirror', 'FusionDcMirrorPatternEditCommand'),
     'ThickenFeature': ('Fusion/UI/FusionUI/Resources/surface/thicken', 'FusionDcSurfaceThickenEditCommand'),
     'BaseFeature': ('Fusion/UI/FusionUI/Resources/Modeling/BaseFeature', 'BaseFeatureActivate'),
+    'RemoveFeature': ('Fusion/UI/FusionUI/Resources/_return', ''),
+    'HoleFeature': ('Fusion/UI/FusionUI/Resources/solid/hole', 'FusionDcHoleEditCommand'),
+    'ThreadFeature': ('Fusion/UI/FusionUI/Resources/solid/thread', 'FusionDcThreadEditCommand'),
 
     # Solid Modify
     'FilletFeature': ('Fusion/UI/FusionUI/Resources/Modeling/FilletEdges', 'FusionDcFilletEditCommand'),
@@ -188,8 +194,15 @@ FEATURE_RESOURCE_MAP = {
     # Planes
     'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(short_class(i.entity.definition)),
     
+    # Not allowed to access entity for these (API mismatch?)
+    # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921
     # Move: FusionDcMoveCopyEditCommand
     # Align: FusionDcAlignEditCommand
+    # '2 : InternalValidationError : res': 'Fusion/UI/FusionSheetMetalUI/Resources/Flange',
+    # '2 : InternalValidationError : res': 'Fusion/UI/FusionSheetMetalUI/Resources/Bend',
+    # '2 : InternalValidationError : res': 'Fusion/UI/FusionSheetMetalUI/Resources/ConvertToSheetMetal',
+    # '2 : InternalValidationError : res': 'Fusion/UI/FusionSheetMetalUI/Resources/FlatPattern',
+    # insert derive feature: 'Fusion/UI/FusionUI/Resources/Derive/CloneWM',
 }
 
 def get_feature_image(obj):
@@ -347,11 +360,15 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 if len(parents) > max_parents:
                     max_parents = len(parents)
             else:
-                # Move and Align does not allow us to access their entity attribute
+                # Move and Align and more does not allow us to access their entity attribute
                 # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921
-                # Assuming Move type.
-                feature['type'] = 'Move'
-                feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Assembly/Move')
+
+                if obj.name.startswith('Derived from '):
+                    feature['type'] = 'InsertDerive'
+                    feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Derive/CloneWM')
+                else:
+                    feature['type'] = '? (Access prohibited by Fusion 360)'
+                    feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/TSpline/Error')
 
             if feature['type'] == 'Occurrence':
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
@@ -572,6 +589,7 @@ def run(context):
                     adsk.core.ApplicationCommandEventHandler,
                     command_terminated_handler)
 
+        # Edit command tracing
         # def f(args):
         #     print(args.commandId)
         #     args.isCanceled = True
@@ -807,7 +825,7 @@ def trace_feature_image(command_terminated_event_args):
     folder = command_terminated_event_args.commandDefinition.resourceFolder
     if folder:
         folder = folder.replace(get_product_deploy_folder() + '/', '')
-    print(f"'{feature}': '{folder}',")
+    print(f"'{feature}': ('{folder}', ''),")
 
 #########################################################################################
 # app.product is not ready at workspaceActivated, but documentActivated does not fire
