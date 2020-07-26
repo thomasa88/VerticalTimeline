@@ -171,8 +171,8 @@
             listItem.addEventListener('click', onFeatureClick, false);
             listItem.addEventListener('dblclick', onFeatureDoubleClick, false);
 
-            if (feature['component-name']) {
-                listItem.setAttribute('data-component-name', feature['component-name']);
+            if (feature['edit-name']) {
+                listItem.setAttribute('data-edit-name', feature['edit-name']);
             }
 
             let groupToggle;
@@ -277,24 +277,18 @@
 
         if (cancelingEdit) {
             cancelingEdit = false;
-            item.querySelector('.name').innerText = item.getAttribute('data-name')
+            item.querySelector('.name').innerText = item.getAttribute('data-name');
             return;
         }
 
-        let hasComponentName = item.hasAttribute('data-component-name');
-
         storeFeatureName(item);
-
-        if (hasComponentName) {
-            item.querySelector('.name').innerText = item.getAttribute('data-name');
-        }
     }
 
     function onFeatureNameFocus(e) {
         let item = e.target.parentElement;
 
-        if (item.hasAttribute('data-component-name')) {
-            item.querySelector('.name').innerText = item.getAttribute('data-component-name');
+        if (item.hasAttribute('data-edit-name')) {
+            item.querySelector('.name').innerText = item.getAttribute('data-edit-name');
         }
 
         let range = document.createRange();
@@ -325,28 +319,29 @@
     }
 
     function storeFeatureName(item) {
-        let value = item.querySelector('.name').innerText;
-        let hasComponentName = item.hasAttribute('data-component-name');
+        let nameElement = item.querySelector('.name');
+        let value = nameElement.innerText;
+        let hasEditName = item.hasAttribute('data-edit-name');
 
-        if (hasComponentName) {
-            if (value == item.getAttribute('data-component-name')) {
-                return;
-            }
-        } else {
-            if (value == item.getAttribute('data-name')) {
-                // No change
-                return;
+        let editableName = (hasEditName ? 'data-edit-name' : 'data-name')
+
+        let ret = [];
+        if (value != item.getAttribute(editableName)) {
+            // Value changed
+            ret = query('setFeatureName', { 'id': parseInt(item.getAttribute('data-id')),
+                                            'value': value });
+            visibleName = ret[0];
+            if (visibleName) {
+                // Store updated name
+                item.setAttribute(editableName, value);
+                // Show the visible name
+                nameElement.innerText = visibleName;
+            } else {
+                // Name was not updated
+                nameElement.innerText = item.getAttribute('data-name');
             }
         }
 
-        ret = query('setFeatureName', { 'id': parseInt(item.getAttribute('data-id')),
-                                        'value': value });
-        ok = ret[0]
-        if (ok) {
-            item.setAttribute('data-name', value);
-        } else {
-            item.querySelector('.name').innerText = item.getAttribute('data-name');
-        }
         processCommands(ret.slice(1));
     }
 

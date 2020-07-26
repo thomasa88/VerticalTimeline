@@ -361,7 +361,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                     # Name is a read-only instance variant of the component's name,
                     # with a prefix on it.
                     # Let the user modify the component's name instead
-                    feature['component-name'] = obj.entity.component.name
+                    feature['edit-name'] = obj.entity.component.name
 
         features.append(feature)
 
@@ -715,25 +715,25 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                 html_commands.append(invalidate(send=False))
             elif action == 'setFeatureName':
                 node = timeline_cache_map[data['id']]
-                item = node.obj
-                ret = True
-                if data['value'] == '':
-                    ret = False
-                else:
+                obj = node.obj
+                visible_name = None
+                if data['value'] != '':
                     try:
-                        entity = item.entity
+                        entity = obj.entity
                     except RuntimeError:
                         # Move and Align does not allow us to access their entity attribute
                         entity = None
-                    if (not item.isGroup
+                    if (not obj.isGroup
                         and entity
                         and entity.classType() == 'adsk::fusion::Occurrence'
-                        and get_occurrence_type(item) != OCCURRENCE_BODIES_COMP):
+                        and get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
                         entity.component.name = data['value']
-                        html_commands.append(invalidate(send=False))
+                        # The shown name will have changed. Invalidate.
+                        #html_commands.append(invalidate(send=False))
                     else:
-                        item.name = data['value']
-                html_commands.append(ret)
+                        obj.name = data['value']
+                    visible_name = obj.name.lstrip()
+                html_commands.append(visible_name)
             elif action == 'selectFeature' or action == 'editFeature':
                 node = timeline_cache_map[data['id']]
                 obj = node.obj
