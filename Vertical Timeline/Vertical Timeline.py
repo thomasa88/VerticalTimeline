@@ -346,15 +346,18 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
 def get_feature_parent_path(component_parent_map, feature):
     design = app.activeProduct
 
-    if feature.classType() == 'adsk::fusion::Occurrence':
+    feature_type = short_class(feature)
+    if feature_type == 'Occurrence':
         parent_name = component_parent_map[feature.component.name]
-    elif feature.classType() == 'adsk::fusion::ConstructionPlane':
-        if feature.parent.classType() == 'adsk::fusion::Component':
+    elif feature_type == 'ConstructionPlane':
+        if (feature.parent.classType() == 'adsk::fusion::Component' and
+            feature.parent != design.rootComponent):
             parent_name = feature.parent.name
         else:
             return []
     elif not hasattr(feature, 'parentComponent'):
-        ui.messageBox("Vertical Timeline: Unhandled missing parent for " + feature.classType())
+        if feature_type not in [ 'Snapshot' ]:
+            print("Vertical Timeline: Unhandled missing parent for " + feature.classType())
         return []
     elif feature.parentComponent == design.rootComponent:
         return []
