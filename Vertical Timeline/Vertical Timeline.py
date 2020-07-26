@@ -355,7 +355,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 feature['type'] = short_class(obj.entity)
                 feature['image'] = get_feature_image(obj)
                 parents = get_feature_parent_path(component_parent_map,
-                                                  obj.entity)
+                                                  obj)
                 feature['parent-components'] = parents
                 if len(parents) > max_parents:
                     max_parents = len(parents)
@@ -384,11 +384,15 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
 
     return (features, max_parents)
 
-def get_feature_parent_path(component_parent_map, feature):
+def get_feature_parent_path(component_parent_map, obj):
     design = app.activeProduct
 
+    feature = obj.entity
     feature_type = short_class(feature)
     if feature_type == 'Occurrence':
+        if obj.isRolledBack or obj.isSuppressed:
+            # No parent component will be available
+            return []
         parent_name = component_parent_map[feature.component.name]
     elif feature_type == 'ConstructionPlane':
         if (feature.parent.classType() == 'adsk::fusion::Component' and
@@ -408,7 +412,9 @@ def get_feature_parent_path(component_parent_map, feature):
     path = []
     while parent_name:
         path.append(parent_name)
-        parent_name = component_parent_map[parent_name]
+        # If the parent component was suppressed or rolled back,
+        # we won't find it, so stop in that case (get() will return None).
+        parent_name = component_parent_map.get(parent_name)
     
     path.reverse()
     return path
