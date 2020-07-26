@@ -241,6 +241,7 @@ def invalidate(send=True, clear=False):
 
     message = ""
     features = []
+    max_parents = 0
     if not clear:
         timeline_status, timeline = get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
