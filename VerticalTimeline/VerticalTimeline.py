@@ -60,6 +60,7 @@ watcher_thread = None
 watcher_event = None
 watcher_stop_flag = None
 timeline_item_count = 0
+timeline_marker_position = -1
 
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'settings.json')
 
@@ -255,6 +256,7 @@ def find_commands_by_resource_folder(folder):
 
 def invalidate(send=True, clear=False):
     global timeline_item_count
+    global timeline_marker_position
     global html_ready
 
     palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
@@ -269,11 +271,14 @@ def invalidate(send=True, clear=False):
         timeline_status, timeline = thomasa88lib.timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
             timeline_item_count = timeline.count
+            timeline_marker_position = timeline.markerPosition
             features, max_parents = get_features(timeline)
         elif timeline_status == TIMELINE_STATUS_PRODUCT_NOT_READY:
             timeline_item_count = -1
+            timeline_marker_position = -1
         elif timeline_status == TIMELINE_STATUS_NOT_PARAMETRIC:
             timeline_item_count = -1
+            timeline_marker_position = -1
             message = "Design is not parametric"
         else:
             print("Unhandled timeline status:", timeline_status)
@@ -319,7 +324,8 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
         feature = {
             'id': str(child_node.id),
             'name': obj.name,
-            'suppressed': obj.isSuppressed or obj.isRolledBack,
+            'suppressed': obj.isSuppressed,
+            'rolledBack': obj.isRolledBack,
             }
 
         # Might there be empty groups?
@@ -501,13 +507,16 @@ def watcher_runner():
 
 def check_timeline():
     global timeline_item_count
+    global timeline_marker_position
     global html_ready
     timeline_status, timeline = thomasa88lib.timeline.get_timeline()
     if timeline_status == TIMELINE_STATUS_OK:
-        if timeline.count != timeline_item_count:
+        if (timeline.count != timeline_item_count or
+            timeline.markerPosition != timeline_marker_position):
             invalidate()
     else:
         timeline_item_count = -1
+        timeline_marker_position = -1
 
 def run(context):
     global ui, app, handlers
@@ -735,6 +744,20 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                             ui.messageBox(f'Editing {thomasa88lib.short_class(obj.entity)} feature is not supported')
                             ret = False
                 html_commands.append(ret)
+            elif action == 'rollToFeature':
+                node = timeline_cache_map[data['id']]
+                obj = node.obj
+                if obj.isGroup and not obj.isCollapsed:
+                    # Cannot move to collapsed group.
+                    # Move to the last item of the group.
+                    obj = obj[-1]
+                elif not obj.isGroup and obj.parentGroup and obj.parentGroup.isCollapsed:
+                    # Cannot move to object inside collapsed group.
+                    # Move to the group instead.
+                    obj = obj.parentGroup
+                html_commands.append(obj.rollTo(False))
+                html_commands.append(invalidate(send=False))
+
             if html_commands:
                 htmlArgs.returnData = json.dumps(html_commands)
         except:

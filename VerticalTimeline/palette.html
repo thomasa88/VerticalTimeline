@@ -44,7 +44,10 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
                 padding-right: 5px;
             }
             .feature:hover {
-               background-color: #d9d9d9;
+                background-color: #d9d9d9;
+            }
+            .first-rolled-back {
+                border-top: 3px solid silver;
             }
             .feature-group-header {
                 border: 1px solid black;
@@ -175,33 +178,42 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
         if (isGroup) {
             list.classList.add('feature-group');
         }
+        let firstRolledBack = true;
         for (const feature of features) {
             let listItem = document.createElement('li');
             listItem.classList.add('feature');
-            if (feature.suppressed) {
+            if (feature.suppressed || feature.rolledBack) {
                 listItem.classList.add('suppressed');
+                if (feature.rolledBack && firstRolledBack) {
+                    firstRolledBack = false;
+                    listItem.classList.add('first-rolled-back');
+                }
             }
-            listItem.title = feature.type;
-
             listItem.setAttribute('data-id', feature['id']);
             listItem.setAttribute('data-name', feature.name);
 
             listItem.addEventListener('click', onFeatureClick);
             listItem.addEventListener('dblclick', onFeatureDoubleClick);
+            listItem.addEventListener('contextmenu', onFeatureContextMenu);
 
             if (feature['edit-name']) {
                 listItem.setAttribute('data-edit-name', feature['edit-name']);
             }
 
+            let titlePrefix = '';
             let groupToggle;
             if (feature.type == 'GROUP') {
                 groupToggle = document.createElement('span');
                 groupToggle.classList.add('group-toggle');
-                //groupToggle.style.width = maxParents * (3 + 2) + 'px';
                 listItem.appendChild(groupToggle);
             } else {
+                let parents = feature['parent-components'];
+                if (parents && parents.length > 0) {
+                    titlePrefix = `Component: ${parents[0]}\n\n`;
+                }
                 addParentBars(listItem, feature, maxParents);
             }
+            listItem.title = `${titlePrefix}Right-click to roll here.`;
 
             let image = document.createElement('img');
             image.src = feature['image'];
@@ -262,7 +274,6 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
         if (!parents) {
             return;
         }
-
         for (const parent of parents) {
             let parentBar = document.createElement('span');
             parentBar.classList.add('parent-bar')
@@ -345,6 +356,21 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
 
         let ret = query('editFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
         processCommands(ret);
+    }
+
+    function onFeatureContextMenu(e) {
+        if (e.target.classList.contains('name')) {
+            // Don't block normal right click in text edit
+            return true;
+        }
+
+        let item = e.target.closest('.feature');
+        let ret = query('rollToFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
+        processCommands(ret);
+        
+        // Block context menu
+        e.preventDefault();
+        return false;
     }
 
     function storeFeatureName(item) {
