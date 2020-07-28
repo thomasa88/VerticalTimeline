@@ -367,7 +367,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                     feature['type'] = 'InsertDerive'
                     feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Derive/CloneWM')
                 else:
-                    feature['type'] = '? (Access prohibited by Fusion 360)'
+                    feature['type'] = '? (Feature info access prohibited by Fusion 360)'
                     feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/TSpline/Error')
 
             if feature['type'] == 'Occurrence':
