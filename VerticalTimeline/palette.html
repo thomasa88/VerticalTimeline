@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <style>
+            body {
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 12px;
+            }
+            #content {
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                min-height: 95vh;
+                margin-left: 0px;
+                margin-right: 0px;
+            }
+            .feature {
+                list-style-type: none;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                padding-left: 5px;
+                padding-right: 5px;
+            }
+            .feature:hover {
+               background-color: #d9d9d9;
+            }
+            .feature-group-header {
+                border: 1px solid black;
+                border-bottom: none;
+                /* Border compensation */
+                padding-left: 4px;
+                padding-right: 4px;
+            }
+            .feature-group-header.collapsed {
+                border-bottom: 1px solid black;
+            }
+            .feature-group {
+                border: 1px solid black;
+                border-top: none;
+            }
+            .feature-group.collapsed {
+                display: none;
+            }
+            .group-toggle {
+                display: inline-block;
+                height: 16px;
+                width: 12px;
+            }
+            .group-toggle::before {
+                content: "－";
+            }
+            .group-toggle.collapsed::before {
+                content: "＋";
+            }
+            .parents-container, .group-toggle {
+                min-width: 12px;
+            }
+            .parents-container {
+                display: inline-block;
+            }
+            .parent-bar {
+                display: inline-block;
+                width: 3px;
+                height: 16px;
+                vertical-align: middle;
+                margin-right: 2px;
+            }
+            .icon {
+                width: 16px;
+                height: 16px;
+                vertical-align: middle;
+                padding: 2px;
+            }
+            .icon:hover {
+                background-color: #d9d9d9;
+            }
+            .name {
+                margin-left: 5px;
+            }
+            .name:hover {
+                outline: 1px solid silver;
+            }
+            .name:focus {
+                background-color: white;
+            }
+            .suppressed {
+                opacity: 0.5;
+            }
+            ul {
+                padding-left: 0px;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="content">
+            <div>
+                <div id="message">
+                    Loading...
+                </div>
+                <div id="timeline">
+                    
+                </div>
+            </div>
+            <div>
+                 by Thomas Axelsson 2020
+            </div>
+        </div>
+    </body>
+    <script>
+    // Can't access the colors from Fusion, so making up our own
+    const COMPONENT_COLORS = [
+        '#e79f53',
+        '#4a51d7',
+        '#6bfcdd',
+        '#54d8f7',
+    ];
+    var colorMap = {};
+    var nextColor = 0;
+
+    var collapsedGroups = new Set();
+
+    var cancelingEdit = false;
+
+    window.fusionJavaScriptHandler = {handle: function(action, jsonData){
+        console.log("Got command:", action);
+        data = JSON.parse(jsonData);
+        return handle(action, data);
+    }};
+
+    function handle(action, data) {
+        try {
+            switch (action) {
+                case 'setTimeline':
+                    let message = document.getElementById('message');
+                    message.innerText = data['message'];
+
+                    let timeline = document.getElementById('timeline');
+                    timeline.innerHTML = '';
+                    appendItems(timeline, data['features'], data['max-parents'])
+
+                    break;
+                case 'debugger':
+                    debugger;
+                    break;
+            }
+        } catch (e) {
+            console.log(e);
+            console.log('exception caught with action: ' + action + ', data: ' + data);
+            return 'FAILED';
+        }
+        return 'OK';
+    }
+
+    function appendItems(parent, features, maxParents, isGroup=false) {
+        let list = document.createElement('ul');
+        if (isGroup) {
+            list.classList.add('feature-group');
+        }
+        for (const feature of features) {
+            let listItem = document.createElement('li');
+            listItem.classList.add('feature');
+            if (feature.suppressed) {
+                listItem.classList.add('suppressed');
+            }
+            listItem.title = feature.type;
+
+            listItem.setAttribute('data-id', feature['id']);
+            listItem.setAttribute('data-name', feature.name);
+
+            listItem.addEventListener('click', onFeatureClick, false);
+            listItem.addEventListener('dblclick', onFeatureDoubleClick, false);
+
+            if (feature['edit-name']) {
+                listItem.setAttribute('data-edit-name', feature['edit-name']);
+            }
+
+            let groupToggle;
+            if (feature.type == 'GROUP') {
+                groupToggle = document.createElement('span');
+                groupToggle.classList.add('group-toggle');
+                //groupToggle.style.width = maxParents * (3 + 2) + 'px';
+                listItem.appendChild(groupToggle);
+            } else {
+                addParentBars(listItem, feature, maxParents);
+            }
+
+            let image = document.createElement('img');
+            image.src = feature['image'];
+            image.classList.add('icon');
+            listItem.appendChild(image);
+
+            let name = document.createElement('span');
+            name.classList.add('name');
+            name.innerText = feature.name;
+            name.contentEditable = true;
+            name.addEventListener('keydown', onFeatureNameClick, false);
+            name.addEventListener('blur', onFeatureNameBlur, false);
+            name.addEventListener('focus', onFeatureNameFocus, false);
+            listItem.appendChild(name);
+
+            list.appendChild(listItem);
+            if (feature.type == 'GROUP') {
+                listItem.classList.add('feature-group-header');
+                listItem.title = 'Group';
+
+                groupList = appendItems(list, feature.children, maxParents, true);
+                groupToggle.addEventListener('click', () => {
+                    let collapse = !collapsedGroups.has(feature.name);
+                    if (collapse) {
+                        collapsedGroups.add(feature.name);
+                    } else {
+                        collapsedGroups.delete(feature.name);
+                    }
+                    listItem.classList.toggle('collapsed', collapse);
+                    groupToggle.classList.toggle('collapsed', collapse);
+                    groupList.classList.toggle('collapsed', collapse);
+                });
+                if (collapsedGroups.has(feature.name)) {
+                    listItem.classList.add('collapsed');
+                    groupToggle.classList.add('collapsed');
+                    groupList.classList.add('collapsed');
+                }
+            }
+        }
+        parent.appendChild(list);
+        return list;
+    }
+
+    function addParentBars(item, feature, maxParents) {
+        let parentBars = document.createElement('span');
+        parentBars.classList.add('parents-container');
+        parentBars.style.width = maxParents * (3 + 2) + 'px';
+        item.appendChild(parentBars);
+
+        let parents = feature['parent-components'];
+        if (!parents) {
+            return;
+        }
+
+        for (const parent of parents) {
+            let parentBar = document.createElement('span');
+            parentBar.classList.add('parent-bar')
+            parentBar.title = parent;
+            color = colorMap[parent];
+            if (!color) {
+                if (nextColor >= COMPONENT_COLORS.length) {
+                    color = 'silver';
+                } else {
+                    color = COMPONENT_COLORS[nextColor];
+                    colorMap[parent] = color;
+                    nextColor++;
+                }
+            }
+            parentBar.style.backgroundColor = color;
+            parentBars.appendChild(parentBar);
+        }
+    }
+
+    function onFeatureNameClick(e) {
+        let item = e.target.parentElement;
+        ESC_KEY = 27;
+        ENTER_KEY = 13;
+        if (e.which == ESC_KEY) {
+            cancelingEdit = true;
+            e.target.blur();
+            e.preventDefault();
+        } else if (e.which == ENTER_KEY) {
+            e.target.blur();
+            e.preventDefault();
+        }
+        e.stopPropagation();
+    }
+
+    function onFeatureNameBlur(e) {
+        let item = e.target.parentElement;
+
+        if (cancelingEdit) {
+            cancelingEdit = false;
+            item.querySelector('.name').innerText = item.getAttribute('data-name');
+            return;
+        }
+
+        storeFeatureName(item);
+    }
+
+    function onFeatureNameFocus(e) {
+        let item = e.target.parentElement;
+
+        if (item.hasAttribute('data-edit-name')) {
+            item.querySelector('.name').innerText = item.getAttribute('data-edit-name');
+        }
+
+        let range = document.createRange();
+        range.selectNodeContents(e.target);
+        let sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function onFeatureClick(e) {
+        let item = e.target;
+
+        // Disabling event capturing does not seem to work,
+        // so using this test to avoid trigger on name click.
+        if (!item.classList.contains('feature')) {
+            return;
+        }
+
+        let ret = query('selectFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
+        processCommands(ret);
+    }
+
+    function onFeatureDoubleClick(e) {
+        let item = e.target;
+
+        let ret = query('editFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
+        processCommands(ret);
+    }
+
+    function storeFeatureName(item) {
+        let nameElement = item.querySelector('.name');
+        let value = nameElement.innerText;
+        let hasEditName = item.hasAttribute('data-edit-name');
+
+        let editableName = (hasEditName ? 'data-edit-name' : 'data-name')
+
+        let ret = [];
+        if (value != item.getAttribute(editableName)) {
+            // Value changed
+            ret = query('setFeatureName', { 'id': parseInt(item.getAttribute('data-id')),
+                                            'value': value });
+            visibleName = ret[0];
+            if (visibleName) {
+                // Store updated name
+                item.setAttribute(editableName, value);
+                // Show the visible name
+                nameElement.innerText = visibleName;
+            } else {
+                // Name was not updated
+                nameElement.innerText = item.getAttribute('data-name');
+            }
+        }
+
+        processCommands(ret.slice(1));
+    }
+
+    function processCommands(commands) {
+        for (let command of commands) {
+            handle(command['action'], command['data']);
+        }
+    }
+
+    function send(action, data = {}) {
+        let commands = query(action, data);
+        processCommands(commands);
+    }
+
+    function query(action, data = {}) {
+        let ret = adsk.fusionSendData(action, JSON.stringify(data));
+        console.log("RET:", ret);
+        return JSON.parse(ret);        
+    }
+
+    function waitForSdk() {
+        if (window.adsk) {
+            ready();
+        } else {
+            console.log("Waiting for SDK");
+            setTimeout(waitForSdk, 500);
+        }
+    }
+
+    function ready(){
+        console.log("HTML ready");
+        send('ready');
+    }
+
+    document.body.onload = waitForSdk;
+    console.log("script end");
+    </script>
+</html>
