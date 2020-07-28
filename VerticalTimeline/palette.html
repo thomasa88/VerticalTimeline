@@ -93,9 +93,6 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
                 vertical-align: middle;
                 padding: 2px;
             }
-            .icon:hover {
-                background-color: #d9d9d9;
-            }
             .name {
                 margin-left: 5px;
             }
@@ -189,8 +186,8 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
             listItem.setAttribute('data-id', feature['id']);
             listItem.setAttribute('data-name', feature.name);
 
-            listItem.addEventListener('click', onFeatureClick, false);
-            listItem.addEventListener('dblclick', onFeatureDoubleClick, false);
+            listItem.addEventListener('click', onFeatureClick);
+            listItem.addEventListener('dblclick', onFeatureDoubleClick);
 
             if (feature['edit-name']) {
                 listItem.setAttribute('data-edit-name', feature['edit-name']);
@@ -215,10 +212,17 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
             name.classList.add('name');
             name.innerText = feature.name;
             name.contentEditable = true;
-            name.addEventListener('keydown', onFeatureNameClick, false);
-            name.addEventListener('blur', onFeatureNameBlur, false);
-            name.addEventListener('focus', onFeatureNameFocus, false);
+            name.addEventListener('keydown', onFeatureNameClick);
+            name.addEventListener('blur', onFeatureNameBlur);
+            name.addEventListener('focus', onFeatureNameFocus);
             listItem.appendChild(name);
+
+            // The browser seems to send click to the rightmost span,
+            // when clicking outside any span. Add this span to avoid
+            // clicks on the right side going to "name".
+            let endFill = document.createElement('span');
+            endFill.innerHTML = '&nbsp;';
+            listItem.appendChild(endFill);
 
             list.appendChild(listItem);
             if (feature.type == 'GROUP') {
@@ -321,9 +325,13 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
 
     function onFeatureClick(e) {
         let item = e.target;
-
+        console.log("feature click")
         // Disabling event capturing does not seem to work,
         // so using this test to avoid trigger on name click.
+        // Clicking on the icon should also go here!
+        if (item.classList.contains('icon')) {
+            item = e.target.parentElement;
+        }
         if (!item.classList.contains('feature')) {
             return;
         }
@@ -333,7 +341,7 @@ along with VerticalTimeline.  If not, see <https://www.gnu.org/licenses/>.
     }
 
     function onFeatureDoubleClick(e) {
-        let item = e.target;
+        let item = e.target.closest('.feature');
 
         let ret = query('editFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
         processCommands(ret);
