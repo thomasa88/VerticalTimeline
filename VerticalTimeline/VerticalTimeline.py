@@ -30,13 +30,28 @@ import adsk.core, adsk.fusion, adsk.cam, traceback
 from collections import defaultdict
 import json
 import os
+import sys
 import threading
+
+NAME = 'Vertical Timeline'
+FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+
+if FILE_DIR not in sys.path:
+    sys.path.append(FILE_DIR)
+import thomasa88lib, thomasa88lib.events, thomasa88lib.timeline
+
+# Force modules to be fresh during development
+import importlib
+importlib.reload(thomasa88lib)
+importlib.reload(thomasa88lib.events)
+importlib.reload(thomasa88lib.timeline)
 
 # global set of event handlers to keep them referenced for the duration of the command
 handlers = []
 
 ui = None
 app = None
+events_manager = thomasa88lib.events.EventsManger(NAME)
 onCommandTerminated = None
 
 html_ready = False
@@ -60,7 +75,7 @@ TIMELINE_STATUS_PRODUCT_NOT_READY = 1
 TIMELINE_STATUS_NOT_PARAMETRIC = 2
 
 _settings = None
-def getEnabled():
+def get_enabled():
     global _settings
     if _settings is None:
         try:
@@ -71,60 +86,13 @@ def getEnabled():
             _settings['enabled'] = False
     return _settings['enabled']
 
-def setEnabled(value):
+def set_enabled(value):
     global _settings
     if _settings is None:
         _settings = {}
     _settings['enabled'] = value
     with open(SETTINGS_FILE, 'w+') as f:
         json.dump(_settings, f)
-
-def get_timeline():
-    product = app.activeProduct
-    if product is None or product.classType() != 'adsk::fusion::Design':
-        print("get_timeline: Product not ready")
-        return (TIMELINE_STATUS_PRODUCT_NOT_READY, None)
-    
-    design = adsk.fusion.Design.cast(product)
-
-    if design.designType == adsk.fusion.DesignTypes.ParametricDesignType:
-        return (TIMELINE_STATUS_OK, design.timeline)
-    else:
-        return (TIMELINE_STATUS_NOT_PARAMETRIC, None)
-
-def get_occurrence_type(obj):
-    # Heuristics to determine component creation feature
-    
-    # When prefixed with a "type prefix", we can be sure of the occurence type
-    # In this case, the name of the timeline object cannot be edited
-    # This, of course, assumes that the user does not create a component starting
-    # with such a string.
-    split_name = obj.name.split(' ', maxsplit=1)
-    # User can have input spaces, so a length of split_name > 1 does not automatically
-    # mean that we have a type prefix. So let's try.
-    # TODO: We can probably compare with the component name to find out if this is
-    #       indeed a prefix.
-    potential_type_prefix = split_name[0]
-    if potential_type_prefix == '':
-        return OCCURRENCE_NEW_COMP
-        # I have not found ant way to determine if a component is a sheet metal component.
-        # Solid features are allowed in sheet metal components and sheet metal features are
-        # allowed in "normal" components, so cannot use the content as a differentiator.
-        #return OCCURRENCE_SHEET_METAL
-    if potential_type_prefix == 'CopyPaste':
-        return OCCURRENCE_COPY_COMP
-
-    if hasattr(obj.entity, 'bRepBodies'):
-        return OCCURRENCE_BODIES_COMP
-
-    return OCCURRENCE_UNKNOWN_COMP
-
-        # if obj.entity.bRepBodies.count == 0:
-        #     return OCCURRENCE_SHEET_METAL
-        # else:
-
-def short_class(obj):
-    return obj.classType().split('::')[-1]
 
 OCCURRENCE_RESOURCE_MAP = {
     OCCURRENCE_NEW_COMP: ('Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent', ''),
@@ -155,7 +123,7 @@ FEATURE_RESOURCE_MAP = {
     'FormFeature': ('Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation', 'TSplineBaseFeatureActivate'),
     'LoftFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/loft', 'FusionLoftEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/loft', 'FusionSurfaceLoftEditCommand'),
     'ExtrudeFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/extrude', 'FusionExtrudeEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/extrude', 'FusionSurfaceExtrudeEditCommand'),
-    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[get_occurrence_type(i)],
+    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[thomasa88lib.timeline.get_occurrence_type(i)],
     'BoundaryFillFeature': ('Fusion/UI/FusionUI/Resources/surface/surface_sculpt', 'FusionSculptEditCommand'),
     'SurfaceDeleteFaceFeature': ('Fusion/UI/FusionUI/Resources/modify/surface_delete', 'FusionDcSurfaceDeleteFaceEditCommand'),
     'RevolveFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/revolve', 'FusionRevolveEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/revolve', 'FusionSurfaceRevolveEditCommand'),
@@ -211,7 +179,7 @@ FEATURE_RESOURCE_MAP = {
     'Snapshot': ('Fusion/UI/FusionUI/Resources/Assembly/Snapshot', 'SnapshotActivate'),
 
     # Planes
-    'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(short_class(i.entity.definition)),
+    'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(thomasa88lib.short_class(i.entity.definition)),
     
     # Not allowed to access entity for these (API mismatch?)
     # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921
@@ -245,7 +213,7 @@ def get_feature_edit_command_id(obj):
 
 def get_feature_res(obj):
     entity = obj.entity
-    fusionType = short_class(entity)
+    fusionType = thomasa88lib.short_class(entity)
     match = FEATURE_RESOURCE_MAP.get(fusionType)
     if callable(match):
         match = match(obj)
@@ -298,7 +266,7 @@ def invalidate(send=True, clear=False):
     features = []
     max_parents = 0
     if not clear:
-        timeline_status, timeline = get_timeline()
+        timeline_status, timeline = thomasa88lib.timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
             timeline_item_count = timeline.count
             features, max_parents = get_features(timeline)
@@ -335,7 +303,7 @@ timeline_cache_tree = None
 timeline_cache_map = None
 def get_features(timeline):
     global timeline_cache_tree, timeline_cache_map
-    flat_timeline = get_flat_timeline(timeline)
+    flat_timeline = thomasa88lib.timeline.flatten_timeline(timeline)
     timeline_cache_tree, timeline_cache_map = build_timeline_tree(flat_timeline)
 
     component_parent_map = get_component_parent_map()
@@ -371,7 +339,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 entity = None
             
             if entity:
-                feature['type'] = short_class(obj.entity)
+                feature['type'] = thomasa88lib.short_class(obj.entity)
                 feature['image'] = get_feature_image(obj)
                 parents = get_feature_parent_path(component_parent_map,
                                                   obj)
@@ -393,7 +361,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
                 # Strip the whitespace to make the list cleaner.
                 feature['name'] = feature['name'].lstrip()
-                if get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
+                if thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
                     # Name is a read-only instance variant of the component's name,
                     # with a prefix on it.
                     # Let the user modify the component's name instead
@@ -407,7 +375,7 @@ def get_feature_parent_path(component_parent_map, obj):
     design = app.activeProduct
 
     feature = obj.entity
-    feature_type = short_class(feature)
+    feature_type = thomasa88lib.short_class(feature)
     if feature_type == 'Occurrence':
         if obj.isRolledBack or obj.isSuppressed:
             # No parent component will be available
@@ -483,24 +451,6 @@ def build_timeline_tree(flat_timeline):
 
     return top_node, id_map
 
-def get_flat_timeline(timeline_collection):
-    '''A flat timeline representation, with all objects except any group objects.'''
-    flat_collection = []
-    
-    for i, obj in enumerate(timeline_collection):
-        if obj.isGroup:
-            # Groups only appear in the timeline if they are collapsed
-            # In that case, the features inside the group are only listed within the group
-            # and not as part of the top-level timeline. So timeline essentially gives us
-            # what is literally shown in the timeline control in Fusion.
-
-            # Flatten the group
-            flat_collection += get_flat_timeline(obj)
-        else:
-            flat_collection.append(obj)
-
-    return flat_collection
-
 def get_component_parent_map():
     design = app.activeProduct
     component_parent_map = {}
@@ -518,26 +468,6 @@ def parent_map_occurrence(component_parent_map, parent_name, occurrences):
          name,
          occurrence.childOccurrences)
 
-def error_catcher_wrapper(func):
-    def catcher(self, args):
-        try:
-            func(args)
-        except:
-            print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
-            if ui:
-                ui.messageBox(f'Vertical Timeline failed:\n{traceback.format_exc()}')
-    return catcher
-
-def add_handler(event, base_class, notify_callback):
-    handler_name = base_class.__name__ + 'Handler'
-    handler_class = type(handler_name, (base_class,),
-                         { "notify": error_catcher_wrapper(notify_callback) })
-    handler_class.__init__ = lambda self: super(handler_class, self).__init__()
-    handler = handler_class()
-    # Avoid garbage collection
-    handlers.append((handler, event))
-    event.add(handler)
-
 def get_view_drop_down():
     qat = ui.toolbars.itemById('QAT')
     file_drop_down = qat.controls.itemById('FileSubMenuCommand')
@@ -549,8 +479,8 @@ def start_watcher():
     global watcher_event # Avoid garbage collection
     global watcher_thread
     watcher_stop_flag = threading.Event()
-    watcher_event = app.registerCustomEvent('thomasa88_timelineWatch')
-    add_handler(watcher_event,
+    watcher_event = events_manager.register_event('thomasa88_timelineWatch')
+    events_manager.add_handler(watcher_event,
                 adsk.core.CustomEventHandler,
                 lambda args: check_timeline())
     watcher_thread = threading.Thread(target=watcher_runner)
@@ -558,7 +488,6 @@ def start_watcher():
 
 def stop_watcher():
     watcher_stop_flag.set()
-    app.unregisterCustomEvent('thomasa88_timelineWatch')
 
     # GUI will be frozen during wait
     watcher_thread.join(timeout=3)
@@ -573,7 +502,7 @@ def watcher_runner():
 def check_timeline():
     global timeline_item_count
     global html_ready
-    timeline_status, timeline = get_timeline()
+    timeline_status, timeline = thomasa88lib.timeline.get_timeline()
     if timeline_status == TIMELINE_STATUS_OK:
         if timeline.count != timeline_item_count:
             invalidate()
@@ -598,7 +527,7 @@ def run(context):
                 'A vertical timeline, that shows feature names. Timeline functionality is limited.',
                 '')
 
-            add_handler(toggle_palette_cmd_def.commandCreated,
+            events_manager.add_handler(toggle_palette_cmd_def.commandCreated,
                         adsk.core.CommandCreatedEventHandler,
                         toggle_palette_command_created_handler)
         
@@ -610,7 +539,7 @@ def run(context):
             view_drop_down.controls.addCommand(toggle_palette_cmd_def,
                                                'SeparatorAfter_DashboardModeCloseCommand', False) 
         
-        add_handler(ui.commandTerminated,
+        events_manager.add_handler(ui.commandTerminated,
                     adsk.core.ApplicationCommandEventHandler,
                     command_terminated_handler)
 
@@ -618,21 +547,21 @@ def run(context):
         # def f(args):
         #     print(args.commandId)
         #     args.isCanceled = True
-        # add_handler(ui.commandStarting,
+        # events_manager.add_handler(ui.commandStarting,
         #             adsk.core.ApplicationCommandEventHandler,
         #             f)
 
         # Fusion bug: Activated is not called when switching to/from Drawing.
         # https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
-        add_handler(app.documentActivated,
+        events_manager.add_handler(app.documentActivated,
                     adsk.core.DocumentEventHandler,
                     document_activated_handler)
 
-        add_handler(ui.workspacePreDeactivate,
+        events_manager.add_handler(ui.workspacePreDeactivate,
                     adsk.core.WorkspaceEventHandler,
                     workspace_pre_deactivate_handler)
 
-        add_handler(ui.workspaceActivated,
+        events_manager.add_handler(ui.workspaceActivated,
                     adsk.core.WorkspaceEventHandler,
                     workspace_activated_handler)                
 
@@ -640,7 +569,7 @@ def run(context):
 
         print("Running")
 
-        if getEnabled():
+        if get_enabled():
             show_palette()
     except:
         print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
@@ -653,9 +582,7 @@ def stop(context):
 
         stop_watcher()
 
-        for handler, event in handlers:
-            event.remove(handler)
-        handlers.clear()
+        events_manager.clean_up()
 
         # Delete the palette created by this add-in.
         palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
@@ -680,8 +607,8 @@ class TogglePaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
         super().__init__()
     def notify(self, args):
         try:
-            enable = not getEnabled()
-            setEnabled(enable)
+            enable = not get_enabled()
+            set_enabled(enable)
             if enable:
                 if ui.activeWorkspace.id == 'FusionSolidEnvironment':
                     show_palette()
@@ -734,7 +661,7 @@ class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
         super().__init__()
     def notify(self, args):
         try:
-            setEnabled(False)
+            set_enabled(False)
         except:
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
@@ -769,7 +696,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                     if (not obj.isGroup
                         and entity
                         and entity.classType() == 'adsk::fusion::Occurrence'
-                        and get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
+                        and thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
                         entity.component.name = data['value']
                         # The shown name will have changed. Invalidate.
                         #html_commands.append(invalidate(send=False))
@@ -805,7 +732,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                             #print("T", ui.terminateActiveCommand())
                             ui.commandDefinitions.itemById(command_id).execute()
                         else:
-                            ui.messageBox(f'Editing {short_class(obj.entity)} feature is not supported')
+                            ui.messageBox(f'Editing {thomasa88lib.short_class(obj.entity)} feature is not supported')
                             ret = False
                 html_commands.append(ret)
             if html_commands:
@@ -813,20 +740,11 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
         except:
             ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))   
 
-class CommandTerminationReason:
-    UnknownTerminationReason = 0
-    CompletedTerminationReason = 1
-    CancelledTerminationReason = 2
-    AbortedTerminationReason = 3
-    PreEmptedTerminationReason = 4
-    SessionEndingTerminationReason = 5
-
-
 def command_terminated_handler(args):
     eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
 
     # As long as we don't update on command create, we only need to listen for command completion
-    if eventArgs.terminationReason != CommandTerminationReason.CompletedTerminationReason:
+    if eventArgs.terminationReason != adsk.core.CommandTerminationReason.CompletedTerminationReason:
         return
 
     # Helper to trace feature images
@@ -840,11 +758,11 @@ def command_terminated_handler(args):
 
 def trace_feature_image(command_terminated_event_args):
     ''' Development function to trace feature images '''
-    _, timeline = get_timeline()
+    _, timeline = thomasa88lib.timeline.get_timeline()
     feature = None
     if timeline:
         try:
-            feature = short_class(timeline.item(timeline.count-1).entity)
+            feature = thomasa88lib.short_class(timeline.item(timeline.count-1).entity)
         except Exception as e:
             feature = str(e)
     folder = command_terminated_event_args.commandDefinition.resourceFolder
@@ -855,7 +773,7 @@ def trace_feature_image(command_terminated_event_args):
 #########################################################################################
 # app.product is not ready at workspaceActivated, but documentActivated does not fire
 # when switching to/from Drawing. However, in that case, it seems that the product is
-# ready when we call get_timeline (presumably since the panel has to be recreated)
+# ready when we call thomasa88lib.timeline.get_timeline (presumably since the panel has to be recreated)
 # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
 #
 # PLM360OpenAttachmentCommand + MarkDocumentsForOpenCommand could possibly be used as
@@ -870,14 +788,14 @@ def trace_feature_image(command_terminated_event_args):
 
 def workspace_pre_deactivate_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
-    if getEnabled():
+    if get_enabled():
         invalidate(clear=True)
 
 def workspace_activated_handler(args):
     #eventArgs = adsk.core.WorkspaceEventArgs.cast(args)
 
     if ui.activeWorkspace.id == 'FusionSolidEnvironment':
-        if getEnabled():
+        if get_enabled():
             show_palette()
     else:
         # Deactivate
@@ -886,7 +804,7 @@ def workspace_activated_handler(args):
 def document_activated_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
     if ui.activeWorkspace.id == 'FusionSolidEnvironment':
-        if getEnabled():
+        if get_enabled():
             show_palette()
 
 #########################################################################################
