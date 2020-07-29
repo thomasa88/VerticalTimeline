@@ -56,9 +56,6 @@ onCommandTerminated = None
 
 html_ready = False
 
-watcher_thread = None
-watcher_event = None
-watcher_stop_flag = None
 timeline_item_count = 0
 timeline_marker_position = -1
 
@@ -480,31 +477,6 @@ def get_view_drop_down():
     view_drop_down = file_drop_down.controls.itemById('ViewWidgetCommand')
     return view_drop_down
 
-def start_watcher():
-    global watcher_stop_flag
-    global watcher_event # Avoid garbage collection
-    global watcher_thread
-    watcher_stop_flag = threading.Event()
-    watcher_event = events_manager.register_event('thomasa88_timelineWatch')
-    events_manager.add_handler(watcher_event,
-                adsk.core.CustomEventHandler,
-                lambda args: check_timeline())
-    watcher_thread = threading.Thread(target=watcher_runner)
-    watcher_thread.start()
-
-def stop_watcher():
-    watcher_stop_flag.set()
-
-    # GUI will be frozen during wait
-    watcher_thread.join(timeout=3)
-    if watcher_thread.is_alive():
-        ui.messageBox('Vertical Timeline watcher did not stop!')
-
-def watcher_runner():
-    global watcher_stop_flag
-    while not watcher_stop_flag.wait(1):
-        app.fireCustomEvent('thomasa88_timelineWatch')
-
 def check_timeline():
     global timeline_item_count
     global timeline_marker_position
@@ -572,9 +544,7 @@ def run(context):
 
         events_manager.add_handler(ui.workspaceActivated,
                     adsk.core.WorkspaceEventHandler,
-                    workspace_activated_handler)                
-
-        start_watcher()
+                    workspace_activated_handler)
 
         print("Running")
 
@@ -589,8 +559,6 @@ def run(context):
 def stop(context):
     try:
         print('Stopping')
-
-        stop_watcher()
 
         events_manager.clean_up()
 
@@ -768,7 +736,9 @@ def command_terminated_handler(args):
     eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
 
     # As long as we don't update on command create, we only need to listen for command completion
-    if eventArgs.terminationReason != adsk.core.CommandTerminationReason.CompletedTerminationReason:
+    # Except Undo, which has a "Cancel" termination reason.
+    if (eventArgs.terminationReason != adsk.core.CommandTerminationReason.CompletedTerminationReason and
+        eventArgs.commandId != 'UndoCommand'):
         return
 
     # Helper to trace feature images
