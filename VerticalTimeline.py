@@ -578,7 +578,8 @@ def run(context):
 
         print("Running")
 
-        if get_enabled():
+        # Show palette when user starts the add-in manually
+        if get_enabled() and app.isStartupComplete:
             show_palette()
     except:
         print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
