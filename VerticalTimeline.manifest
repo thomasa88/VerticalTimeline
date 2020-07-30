@@ -6,7 +6,7 @@
 	"description":	{
 		"":	"Provides a vertical timeline."
 	},
-	"version":	"2020",
+	"version":	"0.1",
 	"runOnStartup":	false,
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true

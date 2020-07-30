@@ -36,37 +36,35 @@ import threading
 NAME = 'Vertical Timeline'
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 
-sys.path.append(FILE_DIR)
-# Must import lib as unique name, to avoid collision with other versions
-# loaded by other add-ins
-import thomasa88lib_VerticalTimeline as thomasa88lib
-import thomasa88lib_VerticalTimeline.events as thomasa88lib_events
-import thomasa88lib_VerticalTimeline.timeline as thomasa88lib_timeline
-import thomasa88lib_VerticalTimeline.settings as thomasa88lib_settings
+# Import relative path to avoid namespace pollution
+from .thomasa88lib import utils
+from .thomasa88lib import events
+from .thomasa88lib import timeline
+from .thomasa88lib import settings
+from .thomasa88lib import manifest
 
 # Force modules to be fresh during development
 import importlib
 importlib.reload(thomasa88lib)
-importlib.reload(thomasa88lib_events)
-importlib.reload(thomasa88lib_timeline)
-importlib.reload(thomasa88lib_settings)
-
-sys.path.remove(FILE_DIR)
+importlib.reload(thomasa88lib.events)
+importlib.reload(thomasa88lib.timeline)
+importlib.reload(thomasa88lib.settings)
+importlib.reload(thomasa88lib.manifest)
 
 # global set of event handlers to keep them referenced for the duration of the command
 handlers = []
 
 ui = None
 app = None
-events_manager = thomasa88lib_events.EventsManager(NAME)
-onCommandTerminated = None
+events_manager = thomasa88lib.events.EventsManager(NAME)
+manifest = thomasa88lib.manifest.read()
 
 html_ready = False
 
 timeline_item_count = 0
 timeline_marker_position = -1
 
-settings = thomasa88lib_settings.SettingsManager(
+settings = thomasa88lib.settings.SettingsManager(
     { 'enabled': False }
 )
 
@@ -116,7 +114,7 @@ FEATURE_RESOURCE_MAP = {
     'FormFeature': ('Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation', 'TSplineBaseFeatureActivate'),
     'LoftFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/loft', 'FusionLoftEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/loft', 'FusionSurfaceLoftEditCommand'),
     'ExtrudeFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/extrude', 'FusionExtrudeEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/extrude', 'FusionSurfaceExtrudeEditCommand'),
-    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[thomasa88lib_timeline.get_occurrence_type(i)],
+    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[thomasa88lib.timeline.get_occurrence_type(i)],
     'BoundaryFillFeature': ('Fusion/UI/FusionUI/Resources/surface/surface_sculpt', 'FusionSculptEditCommand'),
     'SurfaceDeleteFaceFeature': ('Fusion/UI/FusionUI/Resources/modify/surface_delete', 'FusionDcSurfaceDeleteFaceEditCommand'),
     'RevolveFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/revolve', 'FusionRevolveEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/revolve', 'FusionSurfaceRevolveEditCommand'),
@@ -172,7 +170,7 @@ FEATURE_RESOURCE_MAP = {
     'Snapshot': ('Fusion/UI/FusionUI/Resources/Assembly/Snapshot', 'SnapshotActivate'),
 
     # Planes
-    'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(thomasa88lib.short_class(i.entity.definition)),
+    'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(thomasa88lib.utils.short_class(i.entity.definition)),
     
     # Not allowed to access entity for these (API mismatch?)
     # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921
@@ -206,14 +204,14 @@ def get_feature_edit_command_id(obj):
 
 def get_feature_res(obj):
     entity = obj.entity
-    fusionType = thomasa88lib.short_class(entity)
+    fusionType = thomasa88lib.utils.short_class(entity)
     match = FEATURE_RESOURCE_MAP.get(fusionType)
     if callable(match):
         match = match(obj)
     return match
 
 def get_image_path(subpath):
-    path = f'{thomasa88lib.get_fusion_deploy_folder()}/{subpath}/16x16.png'
+    path = f'{thomasa88lib.utils.get_fusion_deploy_folder()}/{subpath}/16x16.png'
     if os.path.exists(path):
         return path
     else:
@@ -250,7 +248,7 @@ def invalidate(send=True, clear=False):
     features = []
     max_parents = 0
     if not clear:
-        timeline_status, timeline = thomasa88lib_timeline.get_timeline()
+        timeline_status, timeline = thomasa88lib.timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
             timeline_item_count = timeline.count
             timeline_marker_position = timeline.markerPosition
@@ -290,7 +288,7 @@ timeline_cache_tree = None
 timeline_cache_map = None
 def get_features(timeline):
     global timeline_cache_tree, timeline_cache_map
-    flat_timeline = thomasa88lib_timeline.flatten_timeline(timeline)
+    flat_timeline = thomasa88lib.timeline.flatten_timeline(timeline)
     timeline_cache_tree, timeline_cache_map = build_timeline_tree(flat_timeline)
 
     component_parent_map = get_component_parent_map()
@@ -327,7 +325,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 entity = None
             
             if entity:
-                feature['type'] = thomasa88lib.short_class(obj.entity)
+                feature['type'] = thomasa88lib.utils.short_class(obj.entity)
                 feature['image'] = get_feature_image(obj)
                 parents = get_feature_parent_path(component_parent_map,
                                                   obj)
@@ -349,7 +347,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
                 # Strip the whitespace to make the list cleaner.
                 feature['name'] = feature['name'].lstrip()
-                if thomasa88lib_timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
+                if thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
                     # Name is a read-only instance variant of the component's name,
                     # with a prefix on it.
                     # Let the user modify the component's name instead
@@ -363,7 +361,7 @@ def get_feature_parent_path(component_parent_map, obj):
     design = app.activeProduct
 
     feature = obj.entity
-    feature_type = thomasa88lib.short_class(feature)
+    feature_type = thomasa88lib.utils.short_class(feature)
     if feature_type == 'Occurrence':
         if obj.isRolledBack or obj.isSuppressed:
             # No parent component will be available
@@ -466,7 +464,7 @@ def check_timeline():
     global timeline_item_count
     global timeline_marker_position
     global html_ready
-    timeline_status, timeline = thomasa88lib_timeline.get_timeline()
+    timeline_status, timeline = thomasa88lib.timeline.get_timeline()
     if timeline_status == TIMELINE_STATUS_OK:
         if (timeline.count != timeline_item_count or
             timeline.markerPosition != timeline_marker_position):
@@ -590,7 +588,8 @@ def show_palette():
     if not palette:
         html_ready = False
 
-        palette = ui.palettes.add('thomasa88_verticalTimelinePalette', 'Vertical Timeline', 'palette.html',
+        palette = ui.palettes.add('thomasa88_verticalTimelinePalette', f'Vertical Timeline {manifest["version"]}',
+                                    'palette.html',
                                     True, True, True, 250, 500, False)
         palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
 
@@ -659,7 +658,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                     if (not obj.isGroup
                         and entity
                         and entity.classType() == 'adsk::fusion::Occurrence'
-                        and thomasa88lib_timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
+                        and thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
                         entity.component.name = data['value']
                         # The shown name will have changed. Invalidate.
                         #html_commands.append(invalidate(send=False))
@@ -695,7 +694,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                             #print("T", ui.terminateActiveCommand())
                             ui.commandDefinitions.itemById(command_id).execute()
                         else:
-                            ui.messageBox(f'Editing {thomasa88lib.short_class(obj.entity)} feature is not supported')
+                            ui.messageBox(f'Editing {thomasa88lib.utils.short_class(obj.entity)} feature is not supported')
                             ret = False
                 html_commands.append(ret)
             elif action == 'rollToFeature':
@@ -737,22 +736,22 @@ def command_terminated_handler(args):
 
 def trace_feature_image(command_terminated_event_args):
     ''' Development function to trace feature images '''
-    _, timeline = thomasa88lib_timeline.get_timeline()
+    _, timeline = thomasa88lib.timeline.get_timeline()
     feature = None
     if timeline:
         try:
-            feature = thomasa88lib.short_class(timeline.item(timeline.count-1).entity)
+            feature = thomasa88lib.utils.short_class(timeline.item(timeline.count-1).entity)
         except Exception as e:
             feature = str(e)
     folder = command_terminated_event_args.commandDefinition.resourceFolder
     if folder:
-        folder = folder.replace(thomasa88lib.get_fusion_deploy_folder() + '/', '')
+        folder = folder.replace(thomasa88lib.utils.get_fusion_deploy_folder() + '/', '')
     print(f"'{feature}': ('{folder}', ''),")
 
 #########################################################################################
 # app.product is not ready at workspaceActivated, but documentActivated does not fire
 # when switching to/from Drawing. However, in that case, it seems that the product is
-# ready when we call thomasa88lib_timeline.get_timeline (presumably since the panel has to be recreated)
+# ready when we call thomasa88lib.timeline.get_timeline (presumably since the panel has to be recreated)
 # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
 #
 # PLM360OpenAttachmentCommand + MarkDocumentsForOpenCommand could possibly be used as
