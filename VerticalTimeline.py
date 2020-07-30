@@ -42,12 +42,14 @@ sys.path.append(FILE_DIR)
 import thomasa88lib_VerticalTimeline as thomasa88lib
 import thomasa88lib_VerticalTimeline.events as thomasa88lib_events
 import thomasa88lib_VerticalTimeline.timeline as thomasa88lib_timeline
+import thomasa88lib_VerticalTimeline.settings as thomasa88lib_settings
 
 # Force modules to be fresh during development
 import importlib
 importlib.reload(thomasa88lib)
 importlib.reload(thomasa88lib_events)
 importlib.reload(thomasa88lib_timeline)
+importlib.reload(thomasa88lib_settings)
 
 sys.path.remove(FILE_DIR)
 
@@ -56,7 +58,7 @@ handlers = []
 
 ui = None
 app = None
-events_manager = thomasa88lib_events.EventsManger(NAME)
+events_manager = thomasa88lib_events.EventsManager(NAME)
 onCommandTerminated = None
 
 html_ready = False
@@ -64,7 +66,15 @@ html_ready = False
 timeline_item_count = 0
 timeline_marker_position = -1
 
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'settings.json')
+settings = thomasa88lib_settings.SettingsManager(
+    { 'enabled': False }
+)
+
+def get_enabled():
+    return settings['enabled']
+
+def set_enabled(value):
+    settings['enabled'] = value
 
 # Occurrence types
 OCCURRENCE_UNKNOWN_COMP = 0
@@ -76,26 +86,6 @@ OCCURRENCE_BODIES_COMP = 4
 TIMELINE_STATUS_OK = 0
 TIMELINE_STATUS_PRODUCT_NOT_READY = 1
 TIMELINE_STATUS_NOT_PARAMETRIC = 2
-
-_settings = None
-def get_enabled():
-    global _settings
-    if _settings is None:
-        try:
-            with open(SETTINGS_FILE, 'r') as f:
-                _settings = json.load(f)
-        except FileNotFoundError:
-            _settings = {}
-            _settings['enabled'] = False
-    return _settings['enabled']
-
-def set_enabled(value):
-    global _settings
-    if _settings is None:
-        _settings = {}
-    _settings['enabled'] = value
-    with open(SETTINGS_FILE, 'w+') as f:
-        json.dump(_settings, f)
 
 OCCURRENCE_RESOURCE_MAP = {
     OCCURRENCE_NEW_COMP: ('Fusion/UI/FusionUI/Resources/Modeling/BooleanNewComponent', ''),
