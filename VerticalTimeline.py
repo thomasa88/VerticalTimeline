@@ -36,22 +36,27 @@ import threading
 NAME = 'Vertical Timeline'
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 
-if FILE_DIR not in sys.path:
-    sys.path.append(FILE_DIR)
-import thomasa88lib, thomasa88lib.events, thomasa88lib.timeline
+sys.path.append(FILE_DIR)
+# Must import lib as unique name, to avoid collision with other versions
+# loaded by other add-ins
+import thomasa88lib_VerticalTimeline as thomasa88lib
+import thomasa88lib_VerticalTimeline.events as thomasa88lib_events
+import thomasa88lib_VerticalTimeline.timeline as thomasa88lib_timeline
 
 # Force modules to be fresh during development
 import importlib
 importlib.reload(thomasa88lib)
-importlib.reload(thomasa88lib.events)
-importlib.reload(thomasa88lib.timeline)
+importlib.reload(thomasa88lib_events)
+importlib.reload(thomasa88lib_timeline)
+
+sys.path.remove(FILE_DIR)
 
 # global set of event handlers to keep them referenced for the duration of the command
 handlers = []
 
 ui = None
 app = None
-events_manager = thomasa88lib.events.EventsManger(NAME)
+events_manager = thomasa88lib_events.EventsManger(NAME)
 onCommandTerminated = None
 
 html_ready = False
@@ -121,7 +126,7 @@ FEATURE_RESOURCE_MAP = {
     'FormFeature': ('Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation', 'TSplineBaseFeatureActivate'),
     'LoftFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/loft', 'FusionLoftEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/loft', 'FusionSurfaceLoftEditCommand'),
     'ExtrudeFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/extrude', 'FusionExtrudeEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/extrude', 'FusionSurfaceExtrudeEditCommand'),
-    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[thomasa88lib.timeline.get_occurrence_type(i)],
+    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[thomasa88lib_timeline.get_occurrence_type(i)],
     'BoundaryFillFeature': ('Fusion/UI/FusionUI/Resources/surface/surface_sculpt', 'FusionSculptEditCommand'),
     'SurfaceDeleteFaceFeature': ('Fusion/UI/FusionUI/Resources/modify/surface_delete', 'FusionDcSurfaceDeleteFaceEditCommand'),
     'RevolveFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/revolve', 'FusionRevolveEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/revolve', 'FusionSurfaceRevolveEditCommand'),
@@ -265,7 +270,7 @@ def invalidate(send=True, clear=False):
     features = []
     max_parents = 0
     if not clear:
-        timeline_status, timeline = thomasa88lib.timeline.get_timeline()
+        timeline_status, timeline = thomasa88lib_timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
             timeline_item_count = timeline.count
             timeline_marker_position = timeline.markerPosition
@@ -305,7 +310,7 @@ timeline_cache_tree = None
 timeline_cache_map = None
 def get_features(timeline):
     global timeline_cache_tree, timeline_cache_map
-    flat_timeline = thomasa88lib.timeline.flatten_timeline(timeline)
+    flat_timeline = thomasa88lib_timeline.flatten_timeline(timeline)
     timeline_cache_tree, timeline_cache_map = build_timeline_tree(flat_timeline)
 
     component_parent_map = get_component_parent_map()
@@ -364,7 +369,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
                 # Strip the whitespace to make the list cleaner.
                 feature['name'] = feature['name'].lstrip()
-                if thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
+                if thomasa88lib_timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
                     # Name is a read-only instance variant of the component's name,
                     # with a prefix on it.
                     # Let the user modify the component's name instead
@@ -481,7 +486,7 @@ def check_timeline():
     global timeline_item_count
     global timeline_marker_position
     global html_ready
-    timeline_status, timeline = thomasa88lib.timeline.get_timeline()
+    timeline_status, timeline = thomasa88lib_timeline.get_timeline()
     if timeline_status == TIMELINE_STATUS_OK:
         if (timeline.count != timeline_item_count or
             timeline.markerPosition != timeline_marker_position):
@@ -674,7 +679,7 @@ class HTMLEventHandler(adsk.core.HTMLEventHandler):
                     if (not obj.isGroup
                         and entity
                         and entity.classType() == 'adsk::fusion::Occurrence'
-                        and thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
+                        and thomasa88lib_timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
                         entity.component.name = data['value']
                         # The shown name will have changed. Invalidate.
                         #html_commands.append(invalidate(send=False))
@@ -752,7 +757,7 @@ def command_terminated_handler(args):
 
 def trace_feature_image(command_terminated_event_args):
     ''' Development function to trace feature images '''
-    _, timeline = thomasa88lib.timeline.get_timeline()
+    _, timeline = thomasa88lib_timeline.get_timeline()
     feature = None
     if timeline:
         try:
@@ -767,7 +772,7 @@ def trace_feature_image(command_terminated_event_args):
 #########################################################################################
 # app.product is not ready at workspaceActivated, but documentActivated does not fire
 # when switching to/from Drawing. However, in that case, it seems that the product is
-# ready when we call thomasa88lib.timeline.get_timeline (presumably since the panel has to be recreated)
+# ready when we call thomasa88lib_timeline.get_timeline (presumably since the panel has to be recreated)
 # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
 #
 # PLM360OpenAttachmentCommand + MarkDocumentsForOpenCommand could possibly be used as
