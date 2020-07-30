@@ -223,22 +223,12 @@ def get_feature_res(obj):
     return match
 
 def get_image_path(subpath):
-    path = f'{get_product_deploy_folder()}/{subpath}/16x16.png'
+    path = f'{thomasa88lib.get_fusion_deploy_folder()}/{subpath}/16x16.png'
     if os.path.exists(path):
         return path
     else:
         print(f'File does not exist: {path}')
         return None
-
-_resFolder = None
-def get_resource_folder():
-    global _resFolder
-    if not _resFolder:
-        _resFolder = ui.workspaces.itemById('FusionSolidEnvironment').resourceFolder.replace('/Environment/Model', '')
-    return _resFolder
-
-def get_product_deploy_folder():
-    return get_resource_folder().replace('/Fusion/UI/FusionUI/Resources', '')
 
 def find_commands(substring):
     return [c.id for c in ui.commandDefinitions if substring in c.id.lower()]
@@ -766,7 +756,7 @@ def trace_feature_image(command_terminated_event_args):
             feature = str(e)
     folder = command_terminated_event_args.commandDefinition.resourceFolder
     if folder:
-        folder = folder.replace(get_product_deploy_folder() + '/', '')
+        folder = folder.replace(thomasa88lib.get_fusion_deploy_folder() + '/', '')
     print(f"'{feature}': ('{folder}', ''),")
 
 #########################################################################################
