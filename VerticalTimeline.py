@@ -42,6 +42,7 @@ from .thomasa88lib import events
 from .thomasa88lib import timeline
 from .thomasa88lib import settings
 from .thomasa88lib import manifest
+from .thomasa88lib import error
 
 # Force modules to be fresh during development
 import importlib
@@ -50,13 +51,12 @@ importlib.reload(thomasa88lib.events)
 importlib.reload(thomasa88lib.timeline)
 importlib.reload(thomasa88lib.settings)
 importlib.reload(thomasa88lib.manifest)
-
-# global set of event handlers to keep them referenced for the duration of the command
-handlers = []
+importlib.reload(thomasa88lib.error)
 
 ui = None
 app = None
-events_manager = thomasa88lib.events.EventsManager(NAME)
+error_catcher = thomasa88lib.error.ErrorCatcher(msgbox_in_debug=False)
+events_manager = thomasa88lib.events.EventsManager(error_catcher)
 manifest = thomasa88lib.manifest.read()
 
 html_ready = False
@@ -474,9 +474,9 @@ def check_timeline():
         timeline_marker_position = -1
 
 def run(context):
-    global ui, app, handlers
+    global ui, app
     debug = False
-    try:
+    with error_catcher:
         app = adsk.core.Application.get()
         ui = app.userInterface
 
@@ -534,13 +534,9 @@ def run(context):
         # Show palette when user starts the add-in manually
         if get_enabled() and app.isStartupComplete:
             show_palette()
-    except:
-        print('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
-        if ui and not debug:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
 def stop(context):
-    try:
+    with error_catcher:
         print('Stopping')
 
         events_manager.clean_up()
@@ -558,28 +554,18 @@ def stop(context):
         cmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
         if cmdDef:
             cmdDef.deleteMe()
-    except:
-        if ui:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
 
-
-class TogglePaletteCommandExecuteHandler(adsk.core.CommandEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            enable = not get_enabled()
-            set_enabled(enable)
-            if enable:
-                if ui.activeWorkspace.id == 'FusionSolidEnvironment':
-                    show_palette()
-                else:
-                    ui.messageBox('Vertical Timeline cannot be shown in this workspace. ' +
-                                'It will be shown when you open a Design.')
-            else:
-                hide_palette()
-        except:
-            ui.messageBox('Command executed Vertical Timeline failed: {}'.format(traceback.format_exc()))
+def toggle_palette_command_execute_handler(args):
+    enable = not get_enabled()
+    set_enabled(enable)
+    if enable:
+        if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+            show_palette()
+        else:
+            ui.messageBox('Vertical Timeline cannot be shown in this workspace. ' +
+                        'It will be shown when you open a Design.')
+    else:
+        hide_palette()
 
 def show_palette():
     global html_ready
@@ -593,13 +579,13 @@ def show_palette():
                                     True, True, True, 250, 500, False)
         palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
 
-        onHTMLEvent = HTMLEventHandler()
-        palette.incomingFromHTML.add(onHTMLEvent)   
-        handlers.append((onHTMLEvent, palette.incomingFromHTML))
+        events_manager.add_handler(palette.incomingFromHTML,
+                                   adsk.core.HTMLEventHandler,
+                                   palette_incoming_from_html_handler)
 
-        onClosed = CloseEventHandler()
-        palette.closed.add(onClosed)
-        handlers.append((onClosed, palette.closed))
+        events_manager.add_handler(palette.closed,
+                                   adsk.core.UserInterfaceGeneralEventHandler,
+                                   palette_closed_handler)        
     else:
         invalidate()
         if not palette.isVisible:
@@ -612,109 +598,97 @@ def hide_palette():
 
 # Event handler for the commandCreated event.
 def toggle_palette_command_created_handler(args):
-        command = args.command
-        onExecute = TogglePaletteCommandExecuteHandler()
-        command.execute.add(onExecute)
-        handlers.append((onExecute, command.execute))
+    command = args.command
+    events_manager.add_handler(command.execute,
+                                adsk.core.CommandEventHandler,
+                                toggle_palette_command_execute_handler)
 
 # Event handler for the palette close event.
-class CloseEventHandler(adsk.core.UserInterfaceGeneralEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        try:
-            set_enabled(False)
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))
+def palette_closed_handler(args):
+    set_enabled(False)
 
 # Event handler for the palette HTML event.                
-class HTMLEventHandler(adsk.core.HTMLEventHandler):
-    def __init__(self):
-        super().__init__()
-    def notify(self, args):
-        global html_ready
-        try:
-            htmlArgs = adsk.core.HTMLEventArgs.cast(args)
-            action = htmlArgs.action
-            data = json.loads(htmlArgs.data)
-            html_commands = []
-            if action == 'ready':
-                print('HTML ready')
-                html_ready = True
+def palette_incoming_from_html_handler(args):
+    global html_ready
+    htmlArgs = adsk.core.HTMLEventArgs.cast(args)
+    action = htmlArgs.action
+    data = json.loads(htmlArgs.data)
+    html_commands = []
+    if action == 'ready':
+        print('HTML ready')
+        html_ready = True
 
-                # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
-                # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
-                html_commands.append(invalidate(send=False))
-            elif action == 'setFeatureName':
-                node = timeline_cache_map[data['id']]
-                obj = node.obj
-                visible_name = None
-                if data['value'] != '':
-                    try:
-                        entity = obj.entity
-                    except RuntimeError:
-                        # Move and Align does not allow us to access their entity attribute
-                        entity = None
-                    if (not obj.isGroup
-                        and entity
-                        and entity.classType() == 'adsk::fusion::Occurrence'
-                        and thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
-                        entity.component.name = data['value']
-                        # The shown name will have changed. Invalidate.
-                        #html_commands.append(invalidate(send=False))
-                    else:
-                        obj.name = data['value']
-                    visible_name = obj.name.lstrip()
-                html_commands.append(visible_name)
-            elif action == 'selectFeature' or action == 'editFeature':
-                node = timeline_cache_map[data['id']]
-                obj = node.obj
-                ret = True
+        # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
+        # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
+        html_commands.append(invalidate(send=False))
+    elif action == 'setFeatureName':
+        node = timeline_cache_map[data['id']]
+        obj = node.obj
+        visible_name = None
+        if data['value'] != '':
+            try:
+                entity = obj.entity
+            except RuntimeError:
+                # Move and Align does not allow us to access their entity attribute
+                entity = None
+            if (not obj.isGroup
+                and entity
+                and entity.classType() == 'adsk::fusion::Occurrence'
+                and thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
+                entity.component.name = data['value']
+                # The shown name will have changed. Invalidate.
+                #html_commands.append(invalidate(send=False))
+            else:
+                obj.name = data['value']
+            visible_name = obj.name.lstrip()
+        html_commands.append(visible_name)
+    elif action == 'selectFeature' or action == 'editFeature':
+        node = timeline_cache_map[data['id']]
+        obj = node.obj
+        ret = True
 
-                if obj.isSuppressed:
-                    ui.messageBox('Cannot select suppressed features')
-                    ret = False
-                elif obj.isRolledBack:
-                    ui.messageBox('Cannot select rolled back features')
-                    ret = False
+        if obj.isSuppressed:
+            ui.messageBox('Cannot select suppressed features')
+            ret = False
+        elif obj.isRolledBack:
+            ui.messageBox('Cannot select rolled back features')
+            ret = False
+        else:
+            # Making this in a transactory way so the current selection is not removed
+            # if the entity is not selectable.
+            newSelection = adsk.core.ObjectCollection.create()
+            newSelection.add(obj.entity)
+            try:
+                ui.activeSelections.all = newSelection
+            except Exception as e:
+                ui.messageBox(f'Failed to select this entity: {e}')
+                ret = False
+            
+            if ret and action == 'editFeature':
+                command_id = get_feature_edit_command_id(obj)
+                if command_id:
+                    #print("T", ui.terminateActiveCommand())
+                    ui.commandDefinitions.itemById(command_id).execute()
                 else:
-                    # Making this in a transactory way so the current selection is not removed
-                    # if the entity is not selectable.
-                    newSelection = adsk.core.ObjectCollection.create()
-                    newSelection.add(obj.entity)
-                    try:
-                        ui.activeSelections.all = newSelection
-                    except Exception as e:
-                        ui.messageBox(f'Failed to select this entity: {e}')
-                        ret = False
-                    
-                    if ret and action == 'editFeature':
-                        command_id = get_feature_edit_command_id(obj)
-                        if command_id:
-                            #print("T", ui.terminateActiveCommand())
-                            ui.commandDefinitions.itemById(command_id).execute()
-                        else:
-                            ui.messageBox(f'Editing {thomasa88lib.utils.short_class(obj.entity)} feature is not supported')
-                            ret = False
-                html_commands.append(ret)
-            elif action == 'rollToFeature':
-                node = timeline_cache_map[data['id']]
-                obj = node.obj
-                if obj.isGroup and not obj.isCollapsed:
-                    # Cannot move to collapsed group.
-                    # Move to the last item of the group.
-                    obj = obj[-1]
-                elif not obj.isGroup and obj.parentGroup and obj.parentGroup.isCollapsed:
-                    # Cannot move to object inside collapsed group.
-                    # Move to the group instead.
-                    obj = obj.parentGroup
-                html_commands.append(obj.rollTo(False))
-                html_commands.append(invalidate(send=False))
+                    ui.messageBox(f'Editing {thomasa88lib.utils.short_class(obj.entity)} feature is not supported')
+                    ret = False
+        html_commands.append(ret)
+    elif action == 'rollToFeature':
+        node = timeline_cache_map[data['id']]
+        obj = node.obj
+        if obj.isGroup and not obj.isCollapsed:
+            # Cannot move to collapsed group.
+            # Move to the last item of the group.
+            obj = obj[-1]
+        elif not obj.isGroup and obj.parentGroup and obj.parentGroup.isCollapsed:
+            # Cannot move to object inside collapsed group.
+            # Move to the group instead.
+            obj = obj.parentGroup
+        html_commands.append(obj.rollTo(False))
+        html_commands.append(invalidate(send=False))
 
-            if html_commands:
-                htmlArgs.returnData = json.dumps(html_commands)
-        except:
-            ui.messageBox('Vertical Timeline failed:\n{}'.format(traceback.format_exc()))   
+    if html_commands:
+        htmlArgs.returnData = json.dumps(html_commands)
 
 def command_terminated_handler(args):
     eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
