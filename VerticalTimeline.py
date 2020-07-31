@@ -489,7 +489,7 @@ def run(context):
                 'Toggle Vertical Timeline',
                 'Vertical Timeline\n\n' +
                 'A vertical timeline, that shows feature names. Timeline functionality is limited.',
-                '')
+                './resources/verticaltimeline')
 
             events_manager.add_handler(toggle_palette_cmd_def.commandCreated,
                         adsk.core.CommandCreatedEventHandler,
@@ -574,7 +574,7 @@ def show_palette():
     if not palette:
         html_ready = False
 
-        palette = ui.palettes.add('thomasa88_verticalTimelinePalette', f'Vertical Timeline {manifest["version"]}',
+        palette = ui.palettes.add('thomasa88_verticalTimelinePalette', f'Vertical Timeline v{manifest["version"]}',
                                     'palette.html',
                                     True, True, True, 250, 500, False)
         palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
