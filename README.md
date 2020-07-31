@@ -1,17 +1,20 @@
 # VerticalTimeline
 
-A Fusion 360 add-in that adds vertical timeline.
+A Fusion 360 add-in that adds a vertical timeline.
 
 ![](screenshot.png)
 
+The functionality is limited at this point  (see [Usage](#usage)) and performance need to be improved for use with large files.
+
 ## Installation
+
 Drop the files in `%appdata%\Autodesk\Autodesk Fusion 360\API\AddIns` .
 
 Make sure the directory is named `VerticalTimeline`, with no suffix.
 
-Press Shift+S in Fusion 360 and go to the *Add-Ins* tab. Then select the add-in and click the *Run* button. Optionally select *Run on Startup*.
-
 ## Usage
+
+Press Shift+S in Fusion 360 and go to the *Add-Ins* tab. Then select the add-in and click the *Run* button. Optionally select *Run on Startup*.
 
 The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
 
