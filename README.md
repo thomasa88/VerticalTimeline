@@ -8,6 +8,8 @@ The functionality is limited at this point  (see [Usage](#usage)) and performanc
 
 ## Installation
 
+Download the add-in from the [Releases](https://github.com/thomasa88/VerticalTimeline/releases) page.
+
 Drop the files in `%appdata%\Autodesk\Autodesk Fusion 360\API\AddIns` .
 
 Make sure the directory is named `VerticalTimeline`, with no suffix.
