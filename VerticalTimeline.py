@@ -648,60 +648,53 @@ def palette_incoming_from_html_handler(args):
         obj = node.obj
         ret = True
 
-        if obj.isSuppressed:
-            ui.messageBox('Cannot select suppressed features')
-            ret = False
-        elif obj.isRolledBack:
-            ui.messageBox('Cannot select rolled back features')
-            ret = False
+        design: adsk.fusion.Design = app.activeProduct
+        entity = obj.entity
+
+        # Making this in a transactory way so the current selection is not removed
+        # if the entity is not selectable.
+        newSelection = adsk.core.ObjectCollection.create()
+
+        if isinstance(entity, adsk.fusion.Occurrence):
+            associated_component = entity.sourceComponent
+        elif isinstance(entity, adsk.fusion.ConstructionPlane):
+            associated_component = entity.parent
         else:
-            design: adsk.fusion.Design = app.activeProduct
-            entity = obj.entity
+            associated_component = entity.parentComponent
 
-            # Making this in a transactory way so the current selection is not removed
-            # if the entity is not selectable.
-            newSelection = adsk.core.ObjectCollection.create()
-
-            if isinstance(entity, adsk.fusion.Occurrence):
-                associated_component = entity.sourceComponent
-            elif isinstance(entity, adsk.fusion.ConstructionPlane):
-                associated_component = entity.parent
-            else:
-                associated_component = entity.parentComponent
-
-            if associated_component == design.rootComponent:
-                # There are no occurrences of root. Just a single instance: root. Can select the entity directly.
-                newSelection.add(entity)
-            else:
-                #Using _all_OccurrencesByComponent to get nested occurrences.
-                in_occurrences = design.rootComponent.allOccurrencesByComponent(associated_component)
-                if hasattr(entity, 'createForAssemblyContext'):
+        if associated_component == design.rootComponent:
+            # There are no occurrences of root. Just a single instance: root. Can select the entity directly.
+            newSelection.add(entity)
+        else:
+            #Using _all_OccurrencesByComponent to get nested occurrences.
+            in_occurrences = design.rootComponent.allOccurrencesByComponent(associated_component)
+            if hasattr(entity, 'createForAssemblyContext'):
+                for occurrence in in_occurrences:
+                    proxy = entity.createForAssemblyContext(occurrence)
+                    newSelection.add(proxy)
+            elif hasattr(entity, 'bodies'):
+                # Workaround for Feature objects
+                ### TODO: Correctly select Feature objects. E.g. BoxFeature, CylinderFeature, ...
+                ###       so that editing them works.
+                for body in entity.bodies:
                     for occurrence in in_occurrences:
-                        proxy = entity.createForAssemblyContext(occurrence)
+                        proxy = body.createForAssemblyContext(occurrence)
                         newSelection.add(proxy)
-                elif hasattr(entity, 'bodies'):
-                    # Workaround for Feature objects
-                    ### TODO: Correctly select Feature objects. E.g. BoxFeature, CylinderFeature, ...
-                    ###       so that editing them works.
-                    for body in entity.bodies:
-                        for occurrence in in_occurrences:
-                            proxy = body.createForAssemblyContext(occurrence)
-                            newSelection.add(proxy)
 
-            try:
-                ui.activeSelections.all = newSelection
-            except Exception as e:
-                ui.messageBox(f'Failed to select {thomasa88lib.utils.short_class(entity)}: {e}')
+        try:
+            ui.activeSelections.all = newSelection
+        except Exception as e:
+            ui.messageBox(f'Failed to select {thomasa88lib.utils.short_class(entity)}: {e}')
+            ret = False
+        
+        if ret and action == 'editFeature':
+            command_id = get_feature_edit_command_id(obj)
+            if command_id:
+                #print("T", ui.terminateActiveCommand())
+                ui.commandDefinitions.itemById(command_id).execute()
+            else:
+                ui.messageBox(f'Editing {thomasa88lib.utils.short_class(entity)} feature is not supported')
                 ret = False
-            
-            if ret and action == 'editFeature':
-                command_id = get_feature_edit_command_id(obj)
-                if command_id:
-                    #print("T", ui.terminateActiveCommand())
-                    ui.commandDefinitions.itemById(command_id).execute()
-                else:
-                    ui.messageBox(f'Editing {thomasa88lib.utils.short_class(entity)} feature is not supported')
-                    ret = False
         html_commands.append(ret)
     elif action == 'rollToFeature':
         node = timeline_cache_map[data['id']]
