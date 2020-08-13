@@ -664,6 +664,8 @@ def palette_incoming_from_html_handler(args):
 
             if isinstance(entity, adsk.fusion.Occurrence):
                 associated_component = entity.sourceComponent
+            elif isinstance(entity, adsk.fusion.ConstructionPlane):
+                associated_component = entity.parent
             else:
                 associated_component = entity.parentComponent
 
