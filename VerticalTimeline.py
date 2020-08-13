@@ -635,6 +635,7 @@ def palette_incoming_from_html_handler(args):
                 and entity
                 and entity.classType() == 'adsk::fusion::Occurrence'
                 and thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
+                # Bonus of not doing a Command transaction: Undo history actually says from and to name.
                 entity.component.name = data['value']
                 # The shown name will have changed. Invalidate.
                 #html_commands.append(invalidate(send=False))
