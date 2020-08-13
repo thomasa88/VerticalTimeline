@@ -37,7 +37,7 @@ The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
 
 * Less intrusive error messages.
 
-* Correctly select and edit primitive features (e.g. *Box*).
+* Correctly select and edit primitive features (e.g. *Box*) that are inside components.
 
 * Fix broken functionality once Fusion fixes its bugs
 
@@ -49,3 +49,4 @@ The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
 
 * v 0.2.0
   * Fix selection of features inside components/occurrences.
+  * Allow selection of rolled back and suppressed features.
