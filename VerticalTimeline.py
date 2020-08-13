@@ -654,14 +654,41 @@ def palette_incoming_from_html_handler(args):
             ui.messageBox('Cannot select rolled back features')
             ret = False
         else:
+            design: adsk.fusion.Design = app.activeProduct
+            entity = obj.entity
+
             # Making this in a transactory way so the current selection is not removed
             # if the entity is not selectable.
             newSelection = adsk.core.ObjectCollection.create()
-            newSelection.add(obj.entity)
+
+            if isinstance(entity, adsk.fusion.Occurrence):
+                associated_component = entity.sourceComponent
+            else:
+                associated_component = entity.parentComponent
+
+            if associated_component == design.rootComponent:
+                # There are no occurrences of root. Just a single instance: root. Can select the entity directly.
+                newSelection.add(entity)
+            else:
+                #Using _all_OccurrencesByComponent to get nested occurrences.
+                in_occurrences = design.rootComponent.allOccurrencesByComponent(associated_component)
+                if hasattr(entity, 'createForAssemblyContext'):
+                    for occurrence in in_occurrences:
+                        proxy = entity.createForAssemblyContext(occurrence)
+                        newSelection.add(proxy)
+                elif hasattr(entity, 'bodies'):
+                    # Workaround for Feature objects
+                    ### TODO: Correctly select Feature objects. E.g. BoxFeature, CylinderFeature, ...
+                    ###       so that editing them works.
+                    for body in entity.bodies:
+                        for occurrence in in_occurrences:
+                            proxy = body.createForAssemblyContext(occurrence)
+                            newSelection.add(proxy)
+
             try:
                 ui.activeSelections.all = newSelection
             except Exception as e:
-                ui.messageBox(f'Failed to select this entity: {e}')
+                ui.messageBox(f'Failed to select {thomasa88lib.utils.short_class(entity)}: {e}')
                 ret = False
             
             if ret and action == 'editFeature':
@@ -670,7 +697,7 @@ def palette_incoming_from_html_handler(args):
                     #print("T", ui.terminateActiveCommand())
                     ui.commandDefinitions.itemById(command_id).execute()
                 else:
-                    ui.messageBox(f'Editing {thomasa88lib.utils.short_class(obj.entity)} feature is not supported')
+                    ui.messageBox(f'Editing {thomasa88lib.utils.short_class(entity)} feature is not supported')
                     ret = False
         html_commands.append(ret)
     elif action == 'rollToFeature':

@@ -37,13 +37,15 @@ The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
 
 * Less intrusive error messages.
 
+* Correctly select and edit primitive features (e.g. *Box*).
+
 * Fix broken functionality once Fusion fixes its bugs
 
   * Cannot show all feature images due to bug: [[API BUG] Cannot access entity of "Move" feature](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921)
 
   * Workaround for document switching since documentActivated is broken. [[API BUG] Application.documentActivated Event do not raise](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750)
 
-  * Cannot select features that belong to components: [Cannot select object in component using activeSelections](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/cannot-select-object-in-component-using-activeselections/m-p/9653216)
+## Changelog
 
-    
-
+* v 0.2.0
+  * Fix selection of features inside components/occurrences.
