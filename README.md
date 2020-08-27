@@ -16,8 +16,6 @@ Make sure the directory is named `VerticalTimeline`, with no suffix.
 
 ## Usage
 
-Press Shift+S in Fusion 360 and go to the *Add-Ins* tab. Then select the add-in and click the *Run* button. Optionally select *Run on Startup*.
-
 The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
 
 * Click an item to select it*.
@@ -26,6 +24,8 @@ The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
 * Right click an item to roll to it.
 
  \* See TODO.
+
+The add-in can be temporarily disabled using the *Scripts and Add-ins* dialog. Press *Shift+S* in Fusion 360™ and go to the *Add-Ins* tab.
 
 ## TODO
 
@@ -47,6 +47,8 @@ The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
 
 ## Changelog
 
+* v 0.2.1
+  * Enable *Run on Startup* by default.
 * v 0.2.0
   * Fix selection of features inside components/occurrences.
   * Allow selection of rolled back and suppressed features.
